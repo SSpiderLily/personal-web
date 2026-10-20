@@ -1,6 +1,6 @@
 # 个人网站
 
-最小展示网站：FastAPI 提供默认个人信息，Vue 3 + Vite 渲染单页，包含后端生成随机点数的骰子小游戏。暂不包含数据库、登录、后台管理或部署配置。
+个人项目展示网站：FastAPI 提供默认个人信息，Vue 3 + Vite 渲染单页，包含后端生成随机点数的骰子小游戏。暂不包含数据库、登录、后台管理或部署配置。
 
 ## 开发环境
 
@@ -37,7 +37,8 @@ npm run dev
 
 ## 修改与构建
 
-- 默认介绍和项目内容：`backend/app/main.py`。
+- 默认个人介绍：`backend/app/main.py`；公开项目列表及完整描述：`frontend/src/App.vue` 的 `projects`。本网站自身不列入项目作品。
+- 首页由个人介绍和两栏内容组成：左侧项目卡片列表，旅行助手排首位；右侧小工具放置骰子。820px及以下侧栏移到列表下方，540px及以下项目卡片上下排列。卡片可点击或按回车打开原生详情弹窗，展示完整描述、功能和演示/源码入口；Esc、关闭按钮或遮罩可关闭。预览图为 `frontend/src/assets/trip-preview.png`，截自本机运行的旅行助手首页（需求填写页面）；卡片和详情均展示完整截图。在线演示暂未开放，按钮保持禁用；后续启用时修改 `tripAvailable`，预留地址为 `/trip/`。个人资料接口失败不阻塞精选项目展示。
 - 页面结构：`frontend/src/App.vue`；样式：`frontend/src/style.css`。
 - 骰子：点击页面骰子，前端调用 `POST /api/dice/roll`，后端返回 1～6 点；不保存数据。组件位于 `frontend/src/components/DiceGame.vue`。
 - 健康检查：`GET /api/health`；个人信息：`GET /api/profile`。
