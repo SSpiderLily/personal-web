@@ -5,8 +5,8 @@ import DiceGame from './components/DiceGame.vue'
 const profile = ref(null)
 const loading = ref(true)
 const error = ref('')
-// Enable when the public demo is ready.
-const tripAvailable = false
+// The public demo is served under /trip/.
+const tripAvailable = true
 const tripUrl = '/trip/'
 const projects = [{
   id: 'trip-planner',
