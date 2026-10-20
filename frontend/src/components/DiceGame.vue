@@ -40,9 +40,9 @@ onBeforeUnmount(() => controller?.abort())
 <template>
   <section class="dice-game" aria-labelledby="dice-heading">
     <div>
-      <p class="eyebrow">TAKE A BREAK / 休息一下</p>
+      <p class="eyebrow">TAKE A BREAK</p>
       <h2 id="dice-heading">今天的手气如何？</h2>
-      <p class="dice-hint">点击骰子，看看这次会掷出几点。</p>
+      <p class="dice-hint">给忙碌按个暂停，掷出今天的小幸运。</p>
     </div>
     <div class="dice-play">
       <button class="dice" :class="{ rolling }" :disabled="rolling"
@@ -57,18 +57,18 @@ onBeforeUnmount(() => controller?.abort())
 </template>
 
 <style scoped>
-.dice-game { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 32px; margin-bottom: 64px; background: #edf2e8; border: 1px solid #d6ddd2; border-radius: 12px; }
-.eyebrow { margin-bottom: 16px; }
-h2 { font-size: 24px; margin: 0 0 12px; }
-.dice-hint { color: #646e67; font-size: 14px; line-height: 1.8; }
-.dice-play { text-align: center; flex: 0 1 300px; }
-.dice { display: inline-grid; place-items: center; width: 96px; height: 96px; padding: 0; border: 1px solid #d6ddd2; border-radius: 18px; background: #fff; color: #375c43; box-shadow: 0 6px 0 #d6ddd2; transition: transform .15s; }
-.dice span { font-size: 76px; line-height: 1; font-family: 'Apple Symbols', 'Segoe UI Symbol', sans-serif; }
+.dice-game { display: flex; flex-direction: column; align-items: stretch; gap: 26px; padding: 28px 23px 22px; margin: 0; background: #edf1e5; border: 1px solid #dce3d1; border-radius: 14px; }
+.eyebrow { font-size: 9px; margin-bottom: 17px; letter-spacing: 1.8px; color: #869374; }
+h2 { font-size: 19px; margin: 0 0 12px; font-weight: 600; letter-spacing: -.5px; }
+.dice-hint { color: #87927b; font-size: 11px; line-height: 1.9; margin: 0; max-width: 185px; }
+.dice-play { text-align: center; padding: 8px 0 0; }
+.dice { display: inline-grid; place-items: center; width: 86px; height: 86px; padding: 0; border: 1px solid #dbe2ce; border-radius: 18px; background: #fffef8; color: #4c6841; box-shadow: 0 6px 0 #dbe2ce; transition: transform .15s; cursor: pointer; }
+.dice span { font-size: 68px; line-height: 1; font-family: 'Apple Symbols', 'Segoe UI Symbol', sans-serif; }
 .dice:hover:not(:disabled) { transform: translateY(-3px); }
 .dice:disabled { cursor: wait; }
-.dice-result { min-height: 44px; margin: 20px 0 0; font-size: 14px; line-height: 1.6; color: #375c43; }
+.dice-result { min-height: 36px; margin: 23px 0 0; font-size: 11px; line-height: 1.7; color: #748366; }
 .rolling { animation: tumble .3s infinite ease-in-out; }
 @keyframes tumble { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg) translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) { .rolling { animation: none; } .dice { transition: none; } }
-@media (max-width: 600px) { .dice-game { flex-direction: column; align-items: stretch; padding: 24px; } .dice-play { flex-basis: auto; } }
+@media (min-width: 541px) and (max-width: 820px) { .dice-game { flex-direction: row; align-items: center; justify-content: space-between; } .dice-play { min-width: 180px; } }
 </style>
