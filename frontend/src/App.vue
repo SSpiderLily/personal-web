@@ -5,9 +5,10 @@ import DiceGame from './components/DiceGame.vue'
 const profile = ref(null)
 const loading = ref(true)
 const error = ref('')
-// The public demo is served under /trip/.
+// Development links to the separately running local project.
 const tripAvailable = true
-const tripUrl = '/trip/'
+const tripUrl = import.meta.env.VITE_TRIP_DEMO_URL
+  || (import.meta.env.MODE === 'development' ? 'http://127.0.0.1:5173/' : '/trip/')
 const projects = [{
   id: 'trip-planner',
   name: '漫游 · 智能旅行助手',
