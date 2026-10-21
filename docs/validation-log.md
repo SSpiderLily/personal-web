@@ -152,3 +152,11 @@
 - 现行CI新增needs:check部署作业，仅main push且开关true或显式手动deploy输入才运行；草稿已迁入正式工作流，不保留副本。并发不取消正在发布的任务。
 - 本地15项部署测试、5项HTTP测试、Gunicorn检查与Vite构建通过；YAML解析和内嵌bash语法检查通过。
 - production环境仅main，配置专用Actions登录密钥（加密保存在环境Secret）、核实的主机公钥和仓库变量。已从本机用此密钥登录ubuntu成功；并非runner验收。自动开关暂false，后续真实发布结果继续记录。
+
+## 2026-10-21：Actions真实发布验收及自动部署开启
+
+- PR #6合并提交8bccaba03c819338bee4712081993a912f5e42c9。手动workflow_dispatch运行 https://github.com/SSpiderLily/personal-web/actions/runs/39553907949 的Python3.13/3.14及deploy三个作业均success。
+- 实际由GitHub runner使用production环境密钥登录ubuntu，服务器通过自身GitHub SSH密钥fetch，执行锁定依赖镜像安装、前端构建、切换和重启。服务器current/REVISION及公网/__release.txt均为8bccaba完整SHA。
+- 公网首页、/api/health、版本标记、JS/CSS、/trip/和/trip/health均200。此前离线回退测试通过，但未对线上故意注入故障，不能声称真实回退已演练。
+- 验收后通过API将仓库DEPLOY_ENABLED设为true并读回确认；服务器enabled=true。production分支策略仅main；变量DEPLOY_HOST/DEPLOY_USER已设，环境Secrets包含DEPLOY_SSH_KEY和DEPLOY_KNOWN_HOSTS。
+- 本次验收文档PR合并会触发首次push main自动发布；其最终CI、部署、分支清理证据以GitHub历史及任务交付结果为准，不循环追加文档提交。用户后续自行验证可见页面改动。

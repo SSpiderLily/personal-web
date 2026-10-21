@@ -75,6 +75,8 @@ bash scripts/check.sh
 
 ## 发布流程
 
+自动部署已开启；真实Actions发布已验证。后续合并到main会在检查通过后自动更新网站。
+
 日常操作：从最新main创建任务分支 → 本地检查 → 提交推送 → PR检查通过后合并。GitHub Actions的CI工作流在main检查通过后，通过SSH登录服务器，服务器再通过SSH拉取此次提交并发布。PR和其他分支不会部署。
 
 仓库变量 `DEPLOY_ENABLED=true` 开启合并后自动发布，改为false可暂停。手动发布：GitHub Actions → CI → Run workflow，选择main并勾选deploy；不勾选则只检查。手动发布可以在自动开关关闭时用于验收，但同样必须通过检查，并要求服务器配置enabled=true。

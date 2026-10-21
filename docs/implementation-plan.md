@@ -4,9 +4,11 @@
 
 当前范围：用户已授权完成Actions登录、部署脚本完善、真实手动发布验收及main自动部署启用，复用ubuntu账号；专用账号/权限细分暂缓。
 
-状态：已补齐锁定依赖镜像安装、SSH拉取与手动发布入口；本地15项部署测试、5项接口测试、Gunicorn检查和前端构建通过。production环境、main分支限制、Actions专用SSH密钥和变量已配置；新密钥本机登录验证成功，DEPLOY_ENABLED暂为false。尚待PR CI、合并、手动Actions发布验收，再开启自动开关。
+状态：PR #6已合并；真实GitHub Actions手动发布验收成功，运行39553907949，发布提交8bccaba。Python3.13/3.14检查及deploy均success；公网首页/API/版本标记/JS/CSS及旅行助手入口检查通过。仓库DEPLOY_ENABLED已设为true，服务器enabled=true；production仅main，复用ubuntu，部署SSH密钥已配置。
 
-验收：Actions在main上检查通过后真实发布，公网版本与提交一致；随后启用自动触发，以最终文档PR验证main推送发布。最终分支清理、工作区干净。GitHub历史承载最后文档PR自身的合并状态，避免循环补记。
+下一步：本次验收文档PR本身用于验证push main自动部署，最终结果以GitHub该PR及其main Actions历史为准。技术接入已完成；用户将自行做一个小改动，验证合并后页面变化。真实故障回退演练仍未执行，不作为已完成验收。
+
+收尾要求：验证自动部署后清理任务分支、本地main同步且工作区干净，不为记录最后文档PR的合并再创建循环提交。用户确认后再清理本阶段计划。
 
 以下为历史阶段记录，不能用于推断当前发布状态。
 
