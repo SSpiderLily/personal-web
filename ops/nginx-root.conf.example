@@ -1,0 +1,4 @@
+# Replace ONLY the root directive in the existing personal-web server block.
+# Keep the existing /api and ALL /trip locations unchanged.
+root /opt/personal-web-deploy/current/frontend/dist;
+# Ensure /__release.txt is not cached by an upstream proxy.

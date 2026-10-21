@@ -1,0 +1,6 @@
+# Merge with existing service via a drop-in during separately authorized setup.
+[Service]
+User=personal-web
+WorkingDirectory=/opt/personal-web-deploy/current/backend
+ExecStart=
+ExecStart=/opt/personal-web-deploy/current/backend/.venv/bin/gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000

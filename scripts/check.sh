@@ -6,6 +6,9 @@ cd "$repo_dir"
 node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major !== 22 || minor < 12) { console.error("Use Node 22.12+ in the 22.x line; see frontend/.nvmrc"); process.exit(1); }'
 command -v uv >/dev/null || { echo 'Install uv before running checks.' >&2; exit 1; }
 
+echo 'Checking deployment safeguards offline...'
+uv run --no-project --python "${UV_PYTHON:-3.13}" python -m unittest discover -s tests -v
+
 echo 'Checking backend dependencies and HTTP contracts...'
 (
   cd backend

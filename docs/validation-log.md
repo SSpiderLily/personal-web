@@ -92,3 +92,27 @@
 - 用户授权提交、推送和创建PR，不合并、不部署。功能提交6375eaf已推送至codex/local-checks-ci，PR：https://github.com/SSpiderLily/personal-web/pull/3 。
 - PR触发运行：https://github.com/SSpiderLily/personal-web/actions/runs/39548296023 。Ubuntu 24.04上Python 3.13和3.14两项检查全部成功，包含环境准备、锁定依赖安装、5项接口测试、Gunicorn配置检查和生产构建。无须修复CI。
 - 本条记录针对6375eaf；文档同步提交的状态另以PR最新检查为准。主分支保护、合并、部署和旅行助手完整交互不在本次验证范围。
+
+## 2026-10-21：main 合并后自动部署只读核查
+
+- GitHub main 为 6729e9f，push CI 运行 39548672670 成功：https://github.com/SSpiderLily/personal-web/actions/runs/39548672670 。远程 .github/workflows 仅 ci.yml，只有 check 作业，没有部署。
+- SSH 只读检查：服务器仍为 fb6fc8f，父提交为 2e63c12；工作区无未提交改动。未在服务器执行 fetch/pull。服务器 origin/main 是旧的本地跟踪引用，不能用 ahead 1 判断与当前 GitHub 的完整差距。
+- deploy.sh 仅 git pull origin main、npm run build、sudo systemctl restart；没有依赖同步、健康检查、回退和发布锁。Node 为 20.20.2，不满足 frontend engines >=22.12；非交互 PATH 未找到 uv。
+- fastapi-personal-web active，127.0.0.1:8000/api/health 返回 status=ok。systemd 直接引用 /opt/personal-web/backend/.venv；nginx -T 确认个人网站 root 为 /opt/personal-web/frontend/dist，/trip 独立指向 trip-planner 目录和8001端口。
+- ubuntu 无 crontab，root crontab 仅看到云厂商维护任务；systemd timers、cron及服务名筛查未发现个人网站自动部署入口。未读取 GitHub Secrets/Webhooks 或云安全组，因此不声称它们不存在。
+- ubuntu 具有 NOPASSWD: ALL，自动部署方案需另设受限权限。不读取或输出私钥、令牌。未修改线上配置、未构建、未重启、未触发 Actions。仅更新本地说明和计划，未提交或推送。
+
+## 2026-10-21：部署草稿本地验证
+
+- 新增 scripts/deploy.py、ops/ci-deploy.yml.draft、配置/服务/Nginx/sudoers 示例及 tests/test_deploy.py；保留原 .github/workflows/ci.yml 不变。工作流不在扫描目录中；脚本默认不执行，配置 enabled 默认 false。
+- 15项离线测试通过：成功切换、构建失败不切换、健康/重启失败回退、中断回退、回退失败不报成功、过期SHA拒绝、构建期间main前进不切换、重复发布、文件锁、初始化缺失、双重执行开关、非法SHA、API/静态版本/资源检查、锁文件安装及发布目录权限。服务、网络和构建命令为模拟；链接切换和文件锁使用真实本地临时目录。
+- 首轮测试因 macOS /var 与 /private/var 的路径别名断言失败，规范化测试临时目录后通过；复核补齐 release 目录0755权限，防止Nginx无法遍历，再次运行15项通过。
+- bash scripts/check.sh 完整通过：部署离线测试、5项后端HTTP契约测试、Gunicorn配置检查、npm ci及Vite生产构建。新权限调整后重跑受影响的部署测试通过。
+- Ruby YAML解析、部署作业needs/cancel配置断言、内嵌bash -n及git diff --check通过。未安装actionlint，未在GitHub实际运行草稿；不将语法检查描述为GitHub兼容性或真实部署验收。
+- 未连接生产服务器、未修改线上、未触发Actions；未提交或推送。本地README、计划及工作区INDEX导航已同步。服务器初始化、专用账号/SSH、工具路径、GitHub Environment/变量/Secrets、首次发布与回退验收仍待单独授权。
+
+## 2026-10-21：部署草稿提交与 PR CI
+
+- 用户授权创建分支、提交推送与创建PR，不合并、不修改线上；分支 codex/deploy-drafts，功能提交56a2b6436f9c13401a84a08d66c71bc899ba0197，PR https://github.com/SSpiderLily/personal-web/pull/4 。
+- PR CI运行39550185995的Python3.13/3.14两个作业均success：https://github.com/SSpiderLily/personal-web/actions/runs/39550185995 。包含离线部署保护测试、接口测试、Gunicorn配置检查和前端构建；不代表真实部署验收。
+- 现行.github/workflows/ci.yml未更改；草稿仍位于ops/ci-deploy.yml.draft，配置enabled=false；未连接生产服务器、未开启部署。本记录同步产生的后续提交应以PR最新检查结果为准。
