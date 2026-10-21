@@ -18,5 +18,6 @@ echo 'Checking backend dependencies and HTTP contracts...'
 )
 echo 'Installing frontend dependencies and building...'
 npm --prefix frontend ci --no-audit --no-fund
+npm --prefix frontend test
 npm --prefix frontend run build
 echo 'All checks passed. No deployment was performed.'

@@ -1,74 +1,93 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { requestDiceValue } from '../dice/requestDiceValue.js'
 
-const value = ref(null)
+const canvas = ref(null)
+const ready = ref(false)
 const rolling = ref(false)
+const value = ref(null)
 const error = ref('')
+const message = ref('点一下，试试手气')
 const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
+let scene
 let controller
+let disposed = false
+
+onMounted(async () => {
+  try {
+    const { createDiceScene } = await import('../dice/createDiceScene.js')
+    if (disposed) return
+    scene = createDiceScene(canvas.value, {
+      onAvailabilityChange(available) {
+        if (disposed) return
+        if (available) scene?.rollTo(value.value ?? 1, { reducedMotion: true })
+        ready.value = available
+      },
+    })
+    // The backend may already have answered while the 3D module was loading.
+    scene.rollTo(value.value ?? 1, { reducedMotion: true })
+    ready.value = true
+  } catch {
+    // A non-WebGL device can still roll using the backend and a simple dice face.
+    ready.value = false
+  }
+})
 
 async function roll() {
-  if (rolling.value) return
+  if (rolling.value || disposed) return
   rolling.value = true
   error.value = ''
-  value.value = null
+  message.value = '正在获取点数…'
   controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 8000)
   try {
-    // A short minimum duration keeps the animation visible even for local requests.
-    const [response] = await Promise.all([
-      fetch('/api/dice/roll', { method: 'POST', signal: controller.signal }),
-      new Promise(resolve => setTimeout(resolve, 450)),
-    ])
-    if (!response.ok) throw new Error('Roll failed')
-    const result = await response.json()
-    if (!Number.isInteger(result.value) || result.value < 1 || result.value > 6) {
-      throw new Error('Invalid dice result')
-    }
-    value.value = result.value
+    const result = await requestDiceValue({ signal: controller.signal })
+    if (disposed) return
+    message.value = '骰子滚动中…'
+    if (scene && ready.value) await scene.rollTo(result, { reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches })
+    if (disposed) return
+    value.value = result
+    message.value = `${result} 点 · 再来一次？`
   } catch {
-    error.value = '这次没有掷成功，请稍后点击骰子重试。'
+    if (!disposed) error.value = '没掷成功，点一下重试'
   } finally {
-    clearTimeout(timeout)
-    rolling.value = false
+    if (!disposed) rolling.value = false
   }
 }
 
-onBeforeUnmount(() => controller?.abort())
+onBeforeUnmount(() => {
+  disposed = true
+  controller?.abort()
+  scene?.dispose()
+})
 </script>
 
 <template>
-  <section class="dice-game" aria-labelledby="dice-heading">
-    <div>
-      <p class="eyebrow">TAKE A BREAK</p>
-      <h2 id="dice-heading">今天的手气如何？</h2>
-      <p class="dice-hint">给忙碌按个暂停，掷出今天的小幸运。</p>
-    </div>
-    <div class="dice-play">
-      <button class="dice" :class="{ rolling }" :disabled="rolling"
-        :aria-label="rolling ? '正在掷骰子' : '掷骰子'" @click="roll">
-        <span aria-hidden="true">{{ faces[(value ?? 1) - 1] }}</span>
-      </button>
-      <p class="dice-result" role="status" aria-live="polite">
-        {{ rolling ? '骰子滚动中…' : error || (value ? `掷出了 ${value} 点！再试一次？` : '点击开始') }}
-      </p>
-    </div>
-  </section>
+  <div class="dice-toy" :class="{ 'has-result': value !== null }" aria-label="骰子小玩具">
+    <canvas ref="canvas" class="dice-canvas" :class="{ 'is-ready': ready }" aria-hidden="true"></canvas>
+    <button class="dice-trigger" :disabled="rolling" :aria-label="rolling ? '正在掷骰子' : '掷骰子'"
+      aria-describedby="dice-result" title="点一下，试试手气" @click="roll">
+      <span v-if="!ready" class="dice-fallback" aria-hidden="true">{{ faces[(value ?? 1) - 1] }}</span>
+    </button>
+    <span class="dice-caption" :class="{ 'has-error': error }" aria-hidden="true">{{ rolling ? '…' : error ? '重试' : value ? `${value} 点` : '掷骰子' }}</span>
+    <p id="dice-result" class="sr-only" role="status" aria-live="polite">{{ error || message }}</p>
+  </div>
 </template>
 
 <style scoped>
-.dice-game { display: flex; flex-direction: column; align-items: stretch; gap: 26px; padding: 28px 23px 22px; margin: 0; background: #edf1e5; border: 1px solid #dce3d1; border-radius: 14px; }
-.eyebrow { font-size: 9px; margin-bottom: 17px; letter-spacing: 1.8px; color: #869374; }
-h2 { font-size: 19px; margin: 0 0 12px; font-weight: 600; letter-spacing: -.5px; }
-.dice-hint { color: #87927b; font-size: 11px; line-height: 1.9; margin: 0; max-width: 185px; }
-.dice-play { text-align: center; padding: 8px 0 0; }
-.dice { display: inline-grid; place-items: center; width: 86px; height: 86px; padding: 0; border: 1px solid #dbe2ce; border-radius: 18px; background: #fffef8; color: #4c6841; box-shadow: 0 6px 0 #dbe2ce; transition: transform .15s; cursor: pointer; }
-.dice span { font-size: 68px; line-height: 1; font-family: 'Apple Symbols', 'Segoe UI Symbol', sans-serif; }
-.dice:hover:not(:disabled) { transform: translateY(-3px); }
-.dice:disabled { cursor: wait; }
-.dice-result { min-height: 36px; margin: 23px 0 0; font-size: 11px; line-height: 1.7; color: #748366; }
-.rolling { animation: tumble .3s infinite ease-in-out; }
-@keyframes tumble { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg) translateY(-6px); } }
-@media (prefers-reduced-motion: reduce) { .rolling { animation: none; } .dice { transition: none; } }
-@media (min-width: 541px) and (max-width: 820px) { .dice-game { flex-direction: row; align-items: center; justify-content: space-between; } .dice-play { min-width: 180px; } }
+.dice-toy { position: fixed; left: -64px; bottom: max(14px, env(safe-area-inset-bottom)); width: 180px; height: 210px; z-index: 10; pointer-events: none; }
+.dice-canvas { position: absolute; top: 0; left: 0; display: block; width: 180px; height: 190px; opacity: 0; }
+.dice-canvas.is-ready { opacity: 1; }
+.dice-trigger { position: absolute; left: 68px; bottom: 28px; width: 44px; height: 64px; border: 0; padding: 0; border-radius: 18px; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.dice-trigger:focus-visible { outline: 2px solid #6d845b; outline-offset: 3px; }
+.dice-trigger:disabled { cursor: wait; }
+.dice-fallback { display: grid; place-items: center; width: 100%; height: 100%; color: #405e34; font-family: 'Apple Symbols', 'Segoe UI Symbol', sans-serif; font-size: 40px; }
+.dice-caption { position: absolute; bottom: 0; left: 68px; width: 44px; margin: 0; border-radius: 18px; padding: 6px 3px; background: #f7f7f2d9; color: #6d7e60; text-align: center; font-size: 10px; line-height: 1.5; backdrop-filter: blur(5px); }
+.has-result .dice-caption { color: #405e34; }
+.dice-caption.has-error { color: #9a4b32; }
+@media (max-width: 820px) {
+  .dice-toy { left: -52px; bottom: max(9px, env(safe-area-inset-bottom)); width: 156px; height: 190px; }
+  .dice-canvas { width: 156px; height: 170px; }
+  .dice-trigger { left: 56px; bottom: 22px; }
+  .dice-caption { left: 56px; font-size: 9px; }
+}
 </style>
