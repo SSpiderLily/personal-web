@@ -136,7 +136,7 @@ class DeploymentTests(unittest.TestCase):
                 d.healthy(config, NEW)
 
     def test_prepare_uses_lockfiles_and_final_venv_path(self):
-        config = dict(self.config, tool_path='/tools/bin', python='/tools/bin/python3.14')
+        config = dict(self.config, tool_path='/tools/bin', python='/tools/bin/python3.14', python_index='https://mirror.example/simple')
         commands = []
         def command(*args, cwd=None, env=None):
             commands.append(args)
@@ -153,7 +153,11 @@ class DeploymentTests(unittest.TestCase):
             return ''
         with patch.dict(d.os.environ, {'VITE_TRIP_DEMO_URL': 'https://wrong.test'}), patch.object(d, 'run', side_effect=command):
             release = d.prepare(config, self.root, self.root / 'repository.git', NEW)
-        self.assertIn(('uv', 'sync', '--locked', '--no-dev', '--python', config['python']), commands)
+        self.assertIn(('uv', 'export', '--locked', '--no-dev', '--no-emit-project',
+                       '--python', config['python'], '--format', 'requirements-txt'), commands)
+        self.assertIn(('uv', 'pip', 'sync', '--python', str(release / 'backend/.venv/bin/python'),
+                       '--require-hashes', '--index-url', config['python_index'],
+                       'deployment-requirements.txt'), commands)
         self.assertIn(('npm', 'ci', '--no-audit', '--no-fund'), commands)
         self.assertTrue(any(c[0] == str(release / 'backend/.venv/bin/gunicorn') for c in commands))
         self.assertEqual((release / 'frontend/dist/__release.txt').read_text().strip(), NEW)
