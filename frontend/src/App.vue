@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import tripPreview from './assets/trip-preview.png'
 import DiceGame from './components/DiceGame.vue'
+import ToolGrid from './components/ToolGrid.vue'
 const profile = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -98,9 +99,8 @@ onMounted(loadProfile)
           <p class="list-footnote">持续构建，也持续记录。更多作品会慢慢出现在这里。</p>
         </section>
         <aside id="playground" class="playground" aria-labelledby="playground-heading">
-          <div class="section-title"><div><p class="eyebrow">PLAYGROUND</p><h2 id="playground-heading">小工具<span class="heading-dot">.</span></h2></div><span class="sidebar-spark" aria-hidden="true">✳</span></div>
-          <DiceGame />
-          <p class="sidebar-note">认真做点事，也记得放松一下。</p>
+          <div class="section-title"><div><p class="eyebrow">LITTLE UTILITIES</p><h2 id="playground-heading">小工具<span class="heading-dot">.</span></h2></div><span class="sidebar-spark" aria-hidden="true">✳</span></div>
+          <ToolGrid />
         </aside>
       </div>
     </main>
@@ -120,6 +120,7 @@ onMounted(loadProfile)
         </div>
       </div>
     </dialog>
+    <DiceGame />
     <footer><a class="brand" href="#about">保持好奇<span class="dot">.</span></a><span>一步一步，把想法变成作品。</span><a href="#about">回到顶部 ↑</a></footer>
   </div>
 </template>

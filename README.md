@@ -38,13 +38,13 @@ npm run dev
 ## 修改与构建
 
 - 默认个人介绍：`backend/app/main.py`；公开项目列表及完整描述：`frontend/src/App.vue` 的 `projects`。本网站自身不列入项目作品。
-- 首页由个人介绍和两栏内容组成：左侧项目卡片列表，旅行助手排首位；右侧小工具放置骰子。820px及以下侧栏移到列表下方，540px及以下项目卡片上下排列。卡片可点击或按回车打开原生详情弹窗，展示完整描述、功能和演示/源码入口；Esc、关闭按钮或遮罩可关闭。预览图为 `frontend/src/assets/trip-preview.png`，截自本机运行的旅行助手首页（需求填写页面）；卡片和详情均展示完整截图。在线演示已启用，链接为 `/trip/`，在新标签页打开；本机开发和本地构建预览默认打开 `http://127.0.0.1:5173/`，生产构建仍使用 `/trip/`，由 Nginx 提供该路径。个人资料接口失败不阻塞精选项目展示。
+- 首页由个人介绍和两栏内容组成：左侧项目卡片列表，旅行助手排首位；右侧小工具使用3×3九宫格展示九个占位图标，暂不实现具体工具。820px及以下侧栏移到列表下方，540px及以下项目卡片上下排列。卡片可点击或按回车打开原生详情弹窗，展示完整描述、功能和演示/源码入口；Esc、关闭按钮或遮罩可关闭。预览图为 `frontend/src/assets/trip-preview.png`，截自本机运行的旅行助手首页（需求填写页面）；卡片和详情均展示完整截图。在线演示已启用，链接为 `/trip/`，在新标签页打开；本机开发和本地构建预览默认打开 `http://127.0.0.1:5173/`，生产构建仍使用 `/trip/`，由 Nginx 提供该路径。个人资料接口失败不阻塞精选项目展示。
 - 页面结构：`frontend/src/App.vue`；样式：`frontend/src/style.css`。
-- 骰子：点击页面骰子，前端调用 `POST /api/dice/roll`，后端返回 1～6 点；不保存数据。组件位于 `frontend/src/components/DiceGame.vue`。
+- 骰子：固定在页面左下角的留白区域，内容区为骰子预留左侧间距，简短提示不覆盖项目卡片。Three.js 渲染圆角3D模型。点击后弹起旋转、落地减速，最终朝上面由 `POST /api/dice/roll` 返回的1～6点决定；动画不生成点数，不保存数据。尺寸采用已确认原型初版的50%。支持减少动态偏好、接口超时重试与WebGL不可用时的简化显示；点数逻辑位于 `frontend/src/dice/`，组件为 `frontend/src/components/DiceGame.vue`。工具占位组件为 `frontend/src/components/ToolGrid.vue`。
 - 健康检查：`GET /api/health`；个人信息：`GET /api/profile`。
 - 前端构建：在 `frontend` 执行 `npm run build`，结果输出到 `dist/`。`npm run preview` 可预览构建，仍需后端运行。
 
-状态见 [搭建计划](docs/implementation-plan.md)，验证证据见 [验证记录](docs/validation-log.md)。
+部署状态见 [搭建计划](docs/implementation-plan.md)，功能使用说明见本页，验证证据见 [验证记录](docs/validation-log.md)。
 
 ## 本地检查与 CI
 
@@ -54,9 +54,9 @@ npm run dev
 bash scripts/check.sh
 ```
 
-脚本先运行离线部署保护测试，再按锁文件同步后端依赖、执行5项HTTP契约测试、检查现有Gunicorn启动配置，然后执行 `npm ci` 和生产构建。任一步失败即退出。会更新本地虚拟环境、node_modules和dist，不启动常驻服务、不访问线上API。首次安装依赖需要联网。
+脚本先运行离线部署保护测试，再按锁文件同步后端依赖、执行5项HTTP契约测试、检查现有Gunicorn启动配置，然后执行 `npm ci`、前端点数/生命周期测试和生产构建。任一步失败即退出。会更新本地虚拟环境、node_modules和dist，不启动常驻服务、不访问线上API。首次安装依赖需要联网。
 
-后端使用标准库 unittest 和 FastAPI TestClient（当前 Starlette 使用 httpx2），无需另起后端进程。接口测试不代表浏览器布局或随机分布已验收。修改页面后仍需人工检查桌面/窄屏、详情弹窗、骰子交互。本地已移除生产旅行助手代理。旅行助手需单独在本机启动；未启动时演示入口无法连接，不会自动转到线上。
+后端使用标准库 unittest 和 FastAPI TestClient（当前 Starlette 使用 httpx2），无需另起后端进程。接口测试不代表浏览器布局或随机分布已验收。前端使用Node内置测试和实际Vue组件脚本，验证六面朝向、接口错误/取消、异步初始化、备用显示、低动态、重复点击与卸载清理。单独运行：`npm --prefix frontend test`。修改页面后仍需人工检查桌面/窄屏、详情弹窗、骰子交互。本地已移除生产旅行助手代理。旅行助手需单独在本机启动；未启动时演示入口无法连接，不会自动转到线上。
 
 `.github/workflows/ci.yml` 在分支推送、面向main的PR或手动触发时运行同一命令，分别覆盖Python 3.13/3.14。部署作业依赖全部检查通过，仅允许main自动或显式手动发布；其他分支和PR不部署。CI文件本身不会禁止合并失败PR。接入状态与证据见执行计划和验证记录。
 
@@ -96,4 +96,4 @@ GitHub production环境仅允许main；Secrets为 `DEPLOY_SSH_KEY` 与 `DEPLOY_K
 
 首次手动发布前的旧站点保留在 `/opt/personal-web`；原配置与Git备份在 `/opt/personal-web-deploy/backups/first-deploy-20261021`。该目录 `restore-old.sh` 可恢复首次发布前的旧站点，会重启个人网站并重载Nginx；不等于回退到最近一次release。暂未执行真实回退演练，进程被强杀或服务器断电也不能保证脚本自动回退。
 
-本地运行 `bash scripts/check.sh` 验证15项离线部署测试、5项接口测试、Gunicorn配置和前端构建。真实Actions发布验收及开关当前状态见[执行计划](docs/implementation-plan.md)与[验证记录](docs/validation-log.md)。
+本地运行 `bash scripts/check.sh` 验证15项离线部署测试、5项接口测试、12项前端测试、Gunicorn配置和前端构建。真实Actions发布验收及开关当前状态见[执行计划](docs/implementation-plan.md)与[验证记录](docs/validation-log.md)。
