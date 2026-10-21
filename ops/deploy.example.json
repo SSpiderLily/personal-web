@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "repository": "https://github.com/SSpiderLily/personal-web.git",
+  "root": "/opt/personal-web-deploy",
+  "tool_path": "/opt/personal-web-tools/bin",
+  "python": "/opt/personal-web-tools/bin/python3.14",
+  "health_url": "http://127.0.0.1",
+  "health_host": "REPLACE_WITH_NGINX_SERVER_NAME"
+}

@@ -1,0 +1,2 @@
+# Validate using visudo before installing; confirm systemctl path on the host.
+personal-web ALL=(root) NOPASSWD: /usr/bin/systemctl restart fastapi-personal-web
