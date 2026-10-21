@@ -68,3 +68,21 @@
 - 生产构建与 git diff --check 通过；公网及本机代理的HTML标题均为旅行助手，JS/CSS资源使用 `/trip/` 前缀并返回200，`/trip/health` 返回健康状态。
 - 浏览器验证详情的演示链接指向 `http://127.0.0.1:5180/trip/`、按钮可点击并保留新标签页属性；内置浏览器未列出新标签页，因此目标页面通过上述HTTP检查确认，不将其计为浏览器跳转验收。
 - 数据库由另一任务确认，未提交规划请求、未验证持久化；本轮未部署个人网站服务器。代码交付以Git提交和PR记录为准。
+
+## 2026-10-21：本地检查与 CI
+
+- 基于远端main `2e63c12` 创建 `codex/local-checks-ci`；开始时工作区干净。服务器只读复核：main为 `fb6fc8f`，额外提交仅新增deploy.sh；个人网站Python为3.14.4、Gunicorn26.2.0、FastAPI0.143.0、Uvicorn0.54.0。未修改线上文件或重启服务。
+- 依赖补齐Gunicorn26.2.0，测试组增加当前Starlette使用的httpx2并更新uv.lock；现有FastAPI/Uvicorn等运行依赖未升级。明确Python支持3.13/3.14，本地默认3.13，Node版本文件固定22.22.1。
+- 原目录Python3.13.7、Node22.22.1、uv0.12.3执行 `bash scripts/check.sh` 成功：锁定依赖安装、5项HTTP契约测试、现有Gunicorn双worker配置检查及Vite生产构建通过。
+- 在不含.venv、node_modules、dist的临时副本中，以Python3.14.7重复完整检查成功，证明该macOS环境可以从锁文件重新安装。并非线上Python3.14.4或GitHub Linux实测。
+- 临时副本将健康接口响应改为错误值，检查脚本返回1、test_health失败，前端安装/构建未执行；临时文件随后恢复。原仓库业务代码未注入故障。
+- bash语法、Workflow YAML解析及Python矩阵、git diff --check通过。CI配置在分支push、main PR及手动触发时执行同一脚本，无SSH/部署步骤，权限仅contents:read。尚未提交或推送，因此GitHub Actions运行及main规则未验证/配置；不能称为已启用合并门禁。
+- 未新增浏览器验收；页面布局、演示跳转、线上回退仍不属于本轮通过范围。Gunicorn --check-config不等于真实多进程HTTP启动测试。
+- README、当前计划及工作区INDEX导航已同步；服务器独有提交、默认Node版本和原地构建问题保留为部署阶段待办。
+
+## 2026-10-21：本地联调整理
+
+- 移除生产/trip代理，开发模式默认演示地址为本机5173，生产构建为/trip/；新增build:local、preview:local输出到dist-local，开发环境示例及忽略规则。
+- check.sh通过：5项HTTP测试、Gunicorn配置、锁定依赖安装与生产构建；本地构建通过。产物确认生产包不含本机5173，本地包包含5173且不含生产IP。
+- 临时5199开发/4199预览通过HTTP访问实际本机8010健康接口；确认不存在生产/trip代理。首次测试在服务器创建后替换代理未生效，模拟响应断言失败，改用真实本地后端后通过。关闭测试开发服务产生预构建取消提示，不计为功能失败。
+- 未调用生产服务或生成行程，未验证完整浏览器交互或GitHub运行。README、计划、INDEX同步；未提交、推送或修改线上。

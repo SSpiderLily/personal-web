@@ -3,8 +3,6 @@ import vue from '@vitejs/plugin-vue'
 
 const proxy = {
   '/api': 'http://127.0.0.1:8010',
-  // Local preview uses the deployed app; production keeps the relative /trip/ URL.
-  '/trip': { target: 'http://124.223.69.7', changeOrigin: true },
 }
 export default defineConfig({
   plugins: [vue()],
