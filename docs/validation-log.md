@@ -110,3 +110,9 @@
 - bash scripts/check.sh 完整通过：部署离线测试、5项后端HTTP契约测试、Gunicorn配置检查、npm ci及Vite生产构建。新权限调整后重跑受影响的部署测试通过。
 - Ruby YAML解析、部署作业needs/cancel配置断言、内嵌bash -n及git diff --check通过。未安装actionlint，未在GitHub实际运行草稿；不将语法检查描述为GitHub兼容性或真实部署验收。
 - 未连接生产服务器、未修改线上、未触发Actions；未提交或推送。本地README、计划及工作区INDEX导航已同步。服务器初始化、专用账号/SSH、工具路径、GitHub Environment/变量/Secrets、首次发布与回退验收仍待单独授权。
+
+## 2026-10-21：部署草稿提交与 PR CI
+
+- 用户授权创建分支、提交推送与创建PR，不合并、不修改线上；分支 codex/deploy-drafts，功能提交56a2b6436f9c13401a84a08d66c71bc899ba0197，PR https://github.com/SSpiderLily/personal-web/pull/4 。
+- PR CI运行39550185995的Python3.13/3.14两个作业均success：https://github.com/SSpiderLily/personal-web/actions/runs/39550185995 。包含离线部署保护测试、接口测试、Gunicorn配置检查和前端构建；不代表真实部署验收。
+- 现行.github/workflows/ci.yml未更改；草稿仍位于ops/ci-deploy.yml.draft，配置enabled=false；未连接生产服务器、未开启部署。本记录同步产生的后续提交应以PR最新检查结果为准。
