@@ -15,7 +15,12 @@ import urllib.request
 
 
 def run(*args, cwd=None, env=None):
-    return subprocess.check_output(args, cwd=cwd, env=env, text=True).strip()
+    try:
+        return subprocess.check_output(args, cwd=cwd, env=env, text=True, timeout=900).strip()
+    except subprocess.CalledProcessError as error:
+        if error.output:
+            print(error.output, file=sys.stderr)
+        raise
 
 
 def switch(root, target):
@@ -78,8 +83,10 @@ def activate(root, release, config):
 
 
 def fetch(config, cache):
+    env = os.environ.copy()
+    env['GIT_SSH_COMMAND'] = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15'
     run('git', '--git-dir', str(cache), 'fetch', '--no-tags', config['repository'],
-        '+refs/heads/main:refs/heads/main')
+        '+refs/heads/main:refs/heads/main', env=env)
     return run('git', '--git-dir', str(cache), 'rev-parse', 'refs/heads/main')
 
 
@@ -104,10 +111,19 @@ def prepare(config, root, cache, sha):
     run('git', '--git-dir', str(cache), 'archive', '--format=tar', '-o', str(archive), sha)
     run('tar', '-xf', str(archive), '-C', str(release))
     archive.unlink()
-    run('uv', 'sync', '--locked', '--no-dev', '--python', config['python'],
-        cwd=release / 'backend', env=env)
+    print('Installing locked production dependencies for ' + sha, flush=True)
+    backend = release / 'backend'
+    run('uv', 'venv', '--python', config['python'], '.venv', cwd=backend, env=env)
+    requirements = run('uv', 'export', '--locked', '--no-dev', '--no-emit-project',
+                       '--python', config['python'], '--format', 'requirements-txt',
+                       cwd=backend, env=env)
+    (backend / 'deployment-requirements.txt').write_text(requirements + '\n')
+    run('uv', 'pip', 'sync', '--python', str(backend / '.venv/bin/python'),
+        '--require-hashes', '--index-url', config.get('python_index', 'https://pypi.org/simple'),
+        'deployment-requirements.txt', cwd=backend, env=env)
     run(str(release / 'backend/.venv/bin/gunicorn'), '--check-config', 'app.main:app',
         '-w', '2', '-k', 'uvicorn.workers.UvicornWorker', cwd=release / 'backend', env=env)
+    print('Building frontend for ' + sha, flush=True)
     run('npm', 'ci', '--no-audit', '--no-fund', cwd=release / 'frontend', env=env)
     run('npm', 'run', 'build', cwd=release / 'frontend', env=env)
     (release / 'REVISION').write_text(sha + '\n')

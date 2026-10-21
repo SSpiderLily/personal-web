@@ -2,9 +2,30 @@
 
 目标：PR 合并到 main 且 CI 通过后，自动部署个人网站。
 
-当前范围：部署草稿已合并；合并记录通过文档 PR 同步，检查通过后合并并清理分支。保持自动部署关闭；服务器初始化、上线和部署仍需后续单独授权。
+当前范围：用户已授权完成Actions登录、部署脚本完善、真实手动发布验收及main自动部署启用，复用ubuntu账号；专用账号/权限细分暂缓。
 
-状态（2026-10-21）：PR #3 已合并；本阶段基于 main 的 6729e9f，三个已合并任务分支已清理，GitHub 自动删除分支已开启。main 的 CI 已成功；自动部署尚未实现。证据见[验证记录](validation-log.md)。PR #4 已合并为 86924b6；最终提交 ba2f2ed 的 Python 3.13/3.14 检查均通过。本地 main 已更新到该合并提交，codex/deploy-drafts 本地及远程分支已删除。自动部署仍关闭，线上安装、首次初始化及真实部署验收仍未实施。
+状态：已补齐锁定依赖镜像安装、SSH拉取与手动发布入口；本地15项部署测试、5项接口测试、Gunicorn检查和前端构建通过。production环境、main分支限制、Actions专用SSH密钥和变量已配置；新密钥本机登录验证成功，DEPLOY_ENABLED暂为false。尚待PR CI、合并、手动Actions发布验收，再开启自动开关。
+
+验收：Actions在main上检查通过后真实发布，公网版本与提交一致；随后启用自动触发，以最终文档PR验证main推送发布。最终分支清理、工作区干净。GitHub历史承载最后文档PR自身的合并状态，避免循环补记。
+
+以下为历史阶段记录，不能用于推断当前发布状态。
+
+## 首次部署前配置核查（2026-10-21）
+
+已具备：服务器Python3.14.4、Git、tar；旧服务健康；磁盘可用约49GB；GitHub/npm/PyPI HTTP可达。云防火墙已允许全部IPv4访问TCP22/80/443（另有14647与ICMP规则），UFW未启用；无需为本草稿新增端口。此结果不等于GitHub runner SSH认证已验证。
+
+明确缺失：personal-web账号；/opt/personal-web-deploy、/opt/personal-web-tools/bin、/etc/personal-web/deploy.json、/usr/local/lib/personal-web/deploy.py。默认Node20.20.2需替换为项目工具路径下22.22.1；非交互PATH未找到uv，需提供0.12.3。现行systemd仍用ubuntu和旧目录，Nginx仍指向旧dist。GitHub没有Environment、Actions Secrets或Variables；经典保护页未列规则，Rulesets API为空。
+
+后续操作顺序（全部待授权实施）：
+1. 保全旧代码fb6fc8f及Nginx/systemd配置，明确恢复原路径的步骤。
+2. 创建专用账号、发布目录和有限sudo权限；准备固定版本工具。Python可复用已安装的3.14.4，配置填写真实路径，无需重复安装。
+3. 安装受管理员管理的脚本和配置，enabled保持false；health_host填124.223.69.7。配置专用SSH公钥、核对主机公钥。
+4. 创建GitHub production环境且只允许main；填DEPLOY_HOST/DEPLOY_USER、DEPLOY_SSH_KEY/DEPLOY_KNOWN_HOSTS；仓库级DEPLOY_ENABLED保持false。设置main通过CI才能合并。使用只读连接检查验证runner登录，不运行部署命令。
+5. 在独立目录准备基线release与独立虚拟环境、dist和版本标记；用临时回环端口验证后端，检查文件权限与配置。当前脚本要求已有健康current，不能用它直接初始化旧站点；首次初始化需单独操作步骤。
+6. 另行授权维护窗口，切换个人网站systemd/Nginx路径，保留全部/trip配置；验证首页、API、静态资源和版本标记，失败恢复原路径。
+7. 自动部署开关仍关闭时，单独授权受控部署与回退验收。通过后才激活工作流草稿，并最后开启DEPLOY_ENABLED。没有通过真实验收前不启用自动发布。
+
+未验证：专用账号/密钥尚不存在，runner实际SSH、完整依赖下载安装、新目录服务切换及真实回退未验证。未读取私钥或Secret内容，未改线上及GitHub配置。
 
 ## 按优先级执行
 

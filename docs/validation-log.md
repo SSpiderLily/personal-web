@@ -123,3 +123,32 @@
 - 本地fetch --prune，确认分支是origin/main祖先后快进更新main并安全删除本地分支；远程分支列表仅main。本次未连接生产服务器或执行部署。
 - 现行CI和部署配置相对PR最终提交无差异，仍只有check作业、enabled=false。合并后main的CI结果本轮未核实。
 - 合并记录通过后续文档 PR 同步；该文档 PR 的提交、CI及合并结果以 GitHub 历史为准，避免为记录文档自身的合并反复产生新提交。
+
+## 2026-10-21：首次部署配置只读核查
+
+- SSH只读核查账号、指定目录、工具版本、systemd和Nginx配置、磁盘内存与健康接口。服务器仍为fb6fc8f，未fetch/pull；新账号与部署目录/配置/脚本不存在，Node20.20.2，Python3.14.4，未找到PATH内uv；服务健康。
+- 浏览器核实GitHub没有Environment、Secrets、Variables；经典分支保护页未列规则，Rulesets API返回[]。腾讯云当前实例124.223.69.7防火墙允许全部IPv4访问TCP22/80/443/14647及ICMP；未编辑规则。主机UFW inactive。
+- 服务器到GitHub返回301、npm/PyPI返回200，仅证明这些HTTP入口可达，不证明完整安装成功或runner SSH可用。通过现有SSH读取主机公钥指纹，未读取私钥。待操作顺序已同步计划，未提交推送或改动线上配置。
+
+## 2026-10-21：首次手动部署完成（简化方案）
+
+- 用户明确同意复用现有账号完成手动部署，暂不启用自动部署。发布SHA936d8b26ad0f95f6bd49e9e61d029bc92a6d65ba；GitHub main CI成功，本机ls-remote确认相同SHA。
+- 原站点fb6fc8f及其虚拟环境/dist保留；旧Git bundle和systemd/Nginx配置保存于/opt/personal-web-deploy/backups/first-deploy-20261021。项目工具独立安装Node22.22.1和uv0.12.3，Node官方SHA256校验通过。
+- 服务器GitHub fetch失败：GnuTLS recv error (-110)，改为传送本机main Git bundle并核对SHA。uv默认下载阻塞后，导出锁定requirements，使用腾讯HTTPS镜像和--require-hashes安装15个生产包。Gunicorn配置、npm ci/build及临时127.0.0.1:18010健康检查通过，临时进程已退出。
+- 最终release为/opt/personal-web-deploy/releases/936d8b26ad0f-797kf948，运行Python3.14.4。仅替换个人网站systemd路径和Nginx root，用户仍ubuntu；nginx -t通过后重启个人网站并重载Nginx。
+- 脚本健康验证通过；本机公网GET /、/api/health、/__release.txt、JS/CSS、/trip/、/trip/health均200，版本标记匹配完整SHA；旅行助手index哈希不变。不推断完整旅行规划业务已验收。
+- GitHub自动部署未启用，服务器配置enabled=false；未修改GitHub设置。旧版本恢复脚本已保存并bash -n通过，未执行真实回退。初始化脚本为一次性程序，通用部署草稿未解决此次网络问题。
+- 本地README、执行计划和本记录更新，未提交或推送。
+
+## 2026-10-21：服务器通过 SSH 拉取 GitHub
+
+- 用户明确指定复用服务器已有SSH密钥。以ubuntu执行BatchMode、StrictHostKeyChecking=yes的git ls-remote及真实git fetch均成功，main为936d8b26ad0f95f6bd49e9e61d029bc92a6d65ba；未读取私钥。
+- /etc/personal-web/deploy.json的repository改为git@github.com:SSpiderLily/personal-web.git，enabled仍false。仅更新代码缓存，未切换current、构建、重启或重新部署。
+- 本地配置示例、README及计划同步；未提交推送。此连接为服务器到GitHub，不等同于GitHub Actions到服务器的登录配置。
+
+## 2026-10-21：自动部署接入准备
+
+- 用户授权完成余下自动部署步骤。脚本改为uv export --locked导出生产依赖，再通过配置镜像使用uv pip sync --require-hashes安装；SSH fetch启用非交互、严格主机核对和连接超时。
+- 现行CI新增needs:check部署作业，仅main push且开关true或显式手动deploy输入才运行；草稿已迁入正式工作流，不保留副本。并发不取消正在发布的任务。
+- 本地15项部署测试、5项HTTP测试、Gunicorn检查与Vite构建通过；YAML解析和内嵌bash语法检查通过。
+- production环境仅main，配置专用Actions登录密钥（加密保存在环境Secret）、核实的主机公钥和仓库变量。已从本机用此密钥登录ubuntu成功；并非runner验收。自动开关暂false，后续真实发布结果继续记录。
