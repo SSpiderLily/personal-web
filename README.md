@@ -58,7 +58,7 @@ bash scripts/check.sh
 
 后端使用标准库 unittest 和 FastAPI TestClient（当前 Starlette 使用 httpx2），无需另起后端进程。接口测试不代表浏览器布局或随机分布已验收。修改页面后仍需人工检查桌面/窄屏、详情弹窗、骰子交互。本地已移除生产旅行助手代理。旅行助手需单独在本机启动；未启动时演示入口无法连接，不会自动转到线上。
 
-`.github/workflows/ci.yml` 在分支推送、面向main的PR或手动触发时运行同一命令，分别覆盖Python 3.13/3.14。没有部署步骤或服务器凭据。需要先提交、推送才能得到GitHub实际运行结果；分支保护仍需另行设置，CI文件本身不会禁止合并失败PR。
+`.github/workflows/ci.yml` 在分支推送、面向main的PR或手动触发时运行同一命令，分别覆盖Python 3.13/3.14。没有部署步骤或服务器凭据。任务分支已推送并经PR验证通过，证据见验证记录；主分支尚未合并本配置，分支保护仍需另行设置，CI文件本身不会禁止合并失败PR。
 
 日常顺序：任务分支修改 → `bash scripts/check.sh` → 人工检查页面 → 查看差异 → 提交并推送任务分支 → 查看两个CI检查 → 创建PR。当前部署差异与本阶段状态见[执行计划](docs/implementation-plan.md)，验收证据见[验证记录](docs/validation-log.md)。
 
