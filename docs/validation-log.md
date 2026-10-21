@@ -116,3 +116,10 @@
 - 用户授权创建分支、提交推送与创建PR，不合并、不修改线上；分支 codex/deploy-drafts，功能提交56a2b6436f9c13401a84a08d66c71bc899ba0197，PR https://github.com/SSpiderLily/personal-web/pull/4 。
 - PR CI运行39550185995的Python3.13/3.14两个作业均success：https://github.com/SSpiderLily/personal-web/actions/runs/39550185995 。包含离线部署保护测试、接口测试、Gunicorn配置检查和前端构建；不代表真实部署验收。
 - 现行.github/workflows/ci.yml未更改；草稿仍位于ops/ci-deploy.yml.draft，配置enabled=false；未连接生产服务器、未开启部署。本记录同步产生的后续提交应以PR最新检查结果为准。
+
+## 2026-10-21：PR #4 合并与分支清理
+
+- 浏览器核实最终提交 ba2f2ed 的4项检查全部通过、无冲突，然后合并 PR #4，合并提交86924b65eec9978fdb8c90f93c7d39d5b7e26367。GitHub自动删除远程codex/deploy-drafts。
+- 本地fetch --prune，确认分支是origin/main祖先后快进更新main并安全删除本地分支；远程分支列表仅main。本次未连接生产服务器或执行部署。
+- 现行CI和部署配置相对PR最终提交无差异，仍只有check作业、enabled=false。合并后main的CI结果本轮未核实。
+- 合并记录通过后续文档 PR 同步；该文档 PR 的提交、CI及合并结果以 GitHub 历史为准，避免为记录文档自身的合并反复产生新提交。
