@@ -127,3 +127,18 @@
 - fetch origin 后，本地准备分支与 origin/main 在整理前均为 bbca380，无新增远程提交。已有准备成果保存为本地提交 04c2796；main 未移动。阶段 A 集成及任务分支安排见后台计划，分支和工作目录状态以 git branch / git worktree list 为准。
 - 本轮 bash scripts/check.sh 全部通过：15 项离线部署保护、26 项后端、12 项前端测试，Gunicorn 配置检查及前端构建。未复验 Python 3.14、真实浏览器、云端数据库或生产；已有建表证据沿用上一条记录。
 - git diff --check 通过；本地 backend/.env 被 Git 忽略，两份模板密码为空。未将真实本地配置纳入提交。仅本地提交及建分支，未创建工作目录、派发开发、推送、合并 main 或发布。
+
+
+## 2026-10-24：生产启动与数据库隔离只读核验
+
+- 用户授权检查生产启动与账号隔离。通过既有 SSH 身份及严格主机核验执行只读检查，数据库查询使用 BEGIN READ ONLY / ROLLBACK；未输出密码，未修改服务器或数据库，未重启、提交或推送。
+- systemd 服务 active/running，使用 ubuntu 和 Gunicorn，不运行 app.dev/dev.sh 或 reload，无 drop-in。主进程及两个 worker 均在 release bbca380109a96111e57fc8cfacee791492302cd4 下运行，健康接口返回 200。
+- /etc/personal-web/app.env 不存在；三个运行进程均未设置 APP_ENV、DEBUG、DB_HOST/PORT/NAME/USER 或 DB_PASSWORD。当前 release 无 settings.py，main.py 不读取 get_settings，且无 backend/.env。新的生产配置尚未接入；旧版健康不能替代新版配置验收。后续按 README 首次接入步骤操作，本轮未实施。
+- PostgreSQL 18.6，listen_addresses=localhost，port=5432；HBA TCP 规则仅回环地址，使用 scram-sha-256，无解析错误；本轮未核验云防火墙。
+- 两个同名账号分别拥有开发库和生产库。各自对本库 CONNECT/CREATE/TEMP 为 true，对另一库均为 false；均非超级用户，无建库、建角色、复制或绕过行级安全权限，无角色成员关系。双向账号连接权限已隔离。
+- public schema 的 CREATE 仅本库账号具有；另一账号有 PUBLIC 授予的 USAGE，但没有数据库 CONNECT，不能据此进入另一库。本轮通过管理员只读查询有效权限，未读取生产密码或使用两组密码实际登录，未验证应用数据库连接、独立测试环境或备份恢复。
+
+
+## 2026-10-24：合并前检查
+
+本轮重新执行 bash scripts/check.sh 全部通过：15 项部署保护、26 项后端、12 项前端测试、Gunicorn 配置检查与前端构建。远程 main 仍为 bbca380；服务器环境配置由用户在合并后手动完成，尚未验收。合并与发布状态另凭实际结果更新。
