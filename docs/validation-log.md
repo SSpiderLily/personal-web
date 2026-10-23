@@ -151,3 +151,19 @@
 - SSH 只读核对 current/REVISION 为上述合并 SHA，systemd active，127.0.0.1:8000/api/health 正常。公网 /__release.txt 匹配 SHA；首页、/api/health、页面引用 JS/CSS 和 /trip/ 均 200，未执行真实旅行规划或浏览器交互验收。
 - 最初以 localhost Host 请求 Nginx /__release.txt 得到 404，改用实际站点地址后返回 200；探测 /trip/api/health 返回 404，该路径未确认为有效健康路由，不据此判断旅行助手服务异常，也不声称旅行助手 API 健康验收通过。
 - 用户选择合并后自行接入生产环境配置；本轮仅自动发布代码及只读检查，助手未创建 app.env、修改 systemd 或数据库权限。生产配置接入与应用数据库连接仍未验收。本节为部署后本地证据记录，不再次推送触发发布。
+
+
+## 2026-10-24：用户填写配置后的生产复验
+
+- 用户要求复验；通过 SSH 仅只读查询，未修改配置、重启或操作数据库数据。app.env 已存在，root 所有、0600；文件中 APP_ENV=production、DEBUG=false、127.0.0.1:5432、库/账号 personal_web_prod，密码非空。密码未输出或传回本机。
+- systemd active/running，但 DropInPaths 为空；主进程 990268 与两个 worker 的 APP_ENV、DEBUG、DB 参数及密码均未设置。使用运行进程环境执行当前 release 的 get_settings() 得到 development、15432、personal_web_dev、debug=false。生产配置文件尚未加载进服务；未将健康接口正常误报为配置验收通过。
+- 将配置文件中的密码仅通过服务器子进程环境传给 psql，强制 default_transaction_read_only=on。实际 TCP 登录成功，返回 personal_web_prod 库及同名账号、127.0.0.1:5432、read_only=on；该账号对开发库 CONNECT=false。此结果证明文件凭据及数据库连接可用，不代表运行应用已接入数据库。
+- 服务版本仍为 f01d1fe，健康接口正常。下一步由用户添加 systemd EnvironmentFile、daemon-reload 并重启服务后复验。本轮只同步本地计划及本记录，未提交或推送。
+
+
+## 2026-10-24：生产配置加载复验通过
+
+- 用户完成 systemd 配置并重启后，助手再次通过 SSH 只读复验。服务 active/running，DropInPaths 指向 /etc/systemd/system/fastapi-personal-web.service.d/override.conf，EnvironmentFiles 为 /etc/personal-web/app.env (ignore_errors=no)。文件 root 所有、0600。
+- 主进程 991733 及两个 worker 991738/991739 均实际加载 APP_ENV=production、DEBUG=false、DB_HOST=127.0.0.1、DB_PORT=5432、DB_NAME/DB_USER=personal_web_prod，密码已设置且三者一致。密码未输出。使用主进程环境运行当前版本的 Settings/应用导入验证，确认 app_env=production、Settings.debug=false、FastAPI.debug=false。
+- 用实际运行进程中的数据库参数与凭据执行 psql 强制只读查询，连接成功；返回 personal_web_prod 库及账号、127.0.0.1:5432、read_only=on；生产库 CONNECT=true，开发库 CONNECT=false。此项为真实进程配置驱动的独立数据库登录，不代表尚未实现的应用数据库驱动已接入。
+- 运行版本仍为 f01d1fe704f92dde35431041f89f67be6703c8aa，健康接口正常。生产配置文件到 systemd、运行进程及配置模块的加载链路验收通过；应用统一连接/事务和隔离测试环境仍待实现。本轮未修改服务器、数据库或重启服务；只更新本地文档，未提交或推送。
