@@ -13,8 +13,8 @@ echo 'Checking backend dependencies and HTTP contracts...'
 (
   cd backend
   uv sync --locked
-  uv run --locked python -m unittest discover -s tests -v
-  uv run --locked gunicorn --check-config app.main:app -w 2 -k uvicorn.workers.UvicornWorker
+  APP_ENV=test DEBUG=false uv run --locked python -m unittest discover -s tests -v
+  APP_ENV=test DEBUG=false uv run --locked gunicorn --check-config app.main:app -w 2 -k uvicorn.workers.UvicornWorker
 )
 echo 'Installing frontend dependencies and building...'
 npm --prefix frontend ci --no-audit --no-fund

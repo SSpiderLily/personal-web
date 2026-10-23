@@ -3,7 +3,10 @@ from secrets import randbelow
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Personal Website API", version="0.1.0")
+from app.settings import get_settings
+
+settings = get_settings()
+app = FastAPI(title="Personal Website API", version="0.1.0", debug=settings.debug)
 
 class Project(BaseModel):
     name: str
