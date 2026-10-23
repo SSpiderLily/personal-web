@@ -142,3 +142,12 @@
 ## 2026-10-24：合并前检查
 
 本轮重新执行 bash scripts/check.sh 全部通过：15 项部署保护、26 项后端、12 项前端测试、Gunicorn 配置检查与前端构建。远程 main 仍为 bbca380；服务器环境配置由用户在合并后手动完成，尚未验收。合并与发布状态另凭实际结果更新。
+
+
+## 2026-10-24：准备基线合并与自动部署完成
+
+- 独立合并前审查未发现阻塞问题，确认默认环境下导入应用不会启动 SSH 或访问数据库。PR #9：https://github.com/SSpiderLily/personal-web/pull/9；head e259435199e790fff1442e16fe42b07bccdf87ea，Python 3.13/3.14 的分支及 PR 检查均成功后，通过 merge 合并为 f01d1fe704f92dde35431041f89f67be6703c8aa。
+- main 运行 https://github.com/SSpiderLily/personal-web/actions/runs/39989960782 的 Python 3.13/3.14 检查及 deploy 均成功。本地 main 已快进同步。原本地任务分支保留；启动阶段 A 前在各独立目录合入最新 main，不丢弃已有工作。
+- SSH 只读核对 current/REVISION 为上述合并 SHA，systemd active，127.0.0.1:8000/api/health 正常。公网 /__release.txt 匹配 SHA；首页、/api/health、页面引用 JS/CSS 和 /trip/ 均 200，未执行真实旅行规划或浏览器交互验收。
+- 最初以 localhost Host 请求 Nginx /__release.txt 得到 404，改用实际站点地址后返回 200；探测 /trip/api/health 返回 404，该路径未确认为有效健康路由，不据此判断旅行助手服务异常，也不声称旅行助手 API 健康验收通过。
+- 用户选择合并后自行接入生产环境配置；本轮仅自动发布代码及只读检查，助手未创建 app.env、修改 systemd 或数据库权限。生产配置接入与应用数据库连接仍未验收。本节为部署后本地证据记录，不再次推送触发发布。
