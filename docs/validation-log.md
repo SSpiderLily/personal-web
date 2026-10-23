@@ -1,182 +1,122 @@
 # 验证记录
 
-## 2026-10-13：初版框架
+本文件只记录有日期、范围和边界的证据，不维护需求或任务进度。以下为当时的验证结果，不代表当前线上版本；源码与测试为实现依据，运行方式见 [README](../README.md)，未收尾事项见[部署归档](archive/2026-10-21-auto-deployment-plan.md)。
 
-- 环境：macOS，Python 3.13.7，Node.js 22.22.1，npm 10.9.4。
-- `uv sync --python /Library/Frameworks/Python.framework/Versions/3.13/bin/python3` 成功，生成项目虚拟环境和 uv.lock。
-- `npm install` 成功，生成 package-lock.json；安装时审计报告为 0 个漏洞。
-- `npm run build` 通过，Vue 页面成功编译。
-- `uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8010` 与 `npm run dev` 均成功启动。
-- HTTP 检查：8010 的 `/api/health`、`/api/profile`，5180 的 `/`、`/api/profile` 全部返回 200；已断言健康状态及默认姓名、项目数量，确认代理联通。
-- 本机旧 Python 3.7 不可执行，首次安装使用显式 Python 3.13 路径。常用端口存在占用，项目采用 8010 和 5180。
-- 浏览器工具报告会话关联错误，实际渲染、移动端视觉效果及失败重试交互未验证。已实现加载、错误及重试状态。
-- 人工接受未确认；未部署；未初始化 Git、未提交或推送。验证服务收尾时停止，可按 README 重启。
+## 2026-10-13：框架与后端骰子
 
-## 2026-10-13：后端骰子小游戏
+- macOS、Python 3.13.7、Node 22.22.1、npm 10.9.4 下依赖安装、锁文件生成与前端构建通过；本机 8010 的健康/个人信息和 5180 的页面/API 代理均返回 200。旧 Python 3.7 不可用，首次安装改用显式 Python 3.13 路径。
+- 临时后端的 100 次掷骰请求均为 1～6 整数并覆盖六种点数；GET 返回 405，个人信息接口正常。样本不证明随机分布均匀。当时浏览器会话失败，初版渲染/点击和人工接受未确认，未部署。
 
-- 用户确认由后端生成 1～6 点，不实现留言板，不持久化数据。
-- `npm run build` 通过。
-- 独立启动后端至临时端口 18010，100 次 POST 全部返回 200 和 1～6 的整数；实际覆盖六种点数。此检查不证明随机分布均匀。
-- GET 掷骰子接口返回 405；原个人信息接口正常。验证进程已停止。
-- 前端已实现请求中动画、防重复点击、8 秒超时、失败重试提示和结果范围校验；浏览器点击与动画效果未验证。
-- 人工接受未确认；未部署、未提交或推送。
+## 2026-10-20：项目展示与详情
 
-## 2026-10-20：首页旅行助手展示
+- 项目列表、实际旅行助手首页截图、完整详情和源码入口构建通过。约 493px 浏览器验证详情打开、滚动、Esc 关闭及焦点恢复；桌面侧栏骰子点击成功。截图来自本机 5173 的真实需求填写页（1280×720），未生成行程或调用模型；卡片/详情完整比例展示。
+- 首次 `/trip/` 虽返回 200，HTML 标题和资源实际属于个人网站，不能作为旅行助手部署证据；用户随后要求暂缓接入，演示恢复禁用。此为历史状态，后续结果见下一条。
+- 未做真实手机或个人信息失败交互专项验收；当时未部署个人网站，Git 交付结果以提交/PR 历史为准。
 
-- 个人介绍、旅行助手精选卡片、其他项目、小实验分区；保留米白与绿色风格。行程示意明确标记，体验按钮暂时禁用，预留 `/trip/`。
-- 前端生产构建通过；本机生产预览桌面浏览器显示首页、精选卡片、其他项目和小游戏，未发现遮挡。骰子点击完成并显示 2 点，个人信息代理正常。
-- 添加 650px 和 850px 布局断点；移动端实机、个人信息失败交互未专项验证。
-- 未部署服务器，未提交或推送；人工接受未确认。临时验证服务完成后停止。
+## 2026-10-21：旅行助手入口与本地隔离
 
-## 2026-10-20：项目列表与侧边娱乐初版
+- 重新启用 `/trip/` 后，公网及当时本机代理的标题为旅行助手，JS/CSS 使用 `/trip/` 前缀并返回 200，`/trip/health` 健康。浏览器确认入口可点击且新标签页属性保留，目标页面通过 HTTP 核对，不计为完整浏览器跳转验收。
+- 随后移除生产代理：开发/本地构建默认 5173，生产使用 `/trip/`。两种构建及临时 5199/4199 经本机 8010 的代理检查通过；生产包不含本机 5173，本地包不含生产 IP。运行后替换代理未生效的首次断言失败，改用实际本地后端后通过。
+- 未提交规划请求或验证旅行助手持久化；个人网站入口健康不代表旅行规划业务验收。
 
-- 用户确认本轮方向：项目展示采用列表板块，骰子移至侧边娱乐板块；Trip Planner 由另一任务部署，本轮仅调整个人网站布局。
-- 桌面左侧为横向项目卡片列表（旅行助手优先），右侧为独立娱乐角。卡片展示布局示意、名称、简介、技术标签和链接；未启用标签筛选、分页或详情跳转。
-- 使用原有后端骰子接口；侧栏不遮挡项目列表，移动端通过820px/540px断点转为上下排列。
-- 生产构建和 git diff --check 通过；桌面浏览器确认项目列表及侧栏，骰子点击成功。移动端实机和个人信息失败交互未专项验证。
-- 使用说明和现行计划已同步；本轮未部署、提交或推送，人工接受未确认。
+## 2026-10-21：本地检查与 GitHub CI
 
-## 2026-10-20：作品卡片与完整详情
+- 基线远端 `2e63c12`，服务器 `fb6fc8f` 的额外差异仅旧部署脚本。补齐 Gunicorn 26.2.0/httpx2，统一检查通过；无依赖目录的临时副本在 Python 3.14.7 上重新安装和构建通过，不等同于生产 Python 3.14.4 验收。
+- 临时副本故意改错健康响应后，`test_health` 失败、脚本返回 1 并停止后续前端步骤；原仓库业务代码未注入故障。Gunicorn 配置检查不代表真实多进程启动。
+- [PR #3](https://github.com/SSpiderLily/personal-web/pull/3) 的 `6375eaf` 在 [运行 39548296023](https://github.com/SSpiderLily/personal-web/actions/runs/39548296023) 上通过 Ubuntu 24.04 / Python 3.13、3.14 检查。main `6729e9f` 的 [运行 39548672670](https://github.com/SSpiderLily/personal-web/actions/runs/39548672670) 也通过；当时仅 check，没有部署作业，不能称已启用自动发布或合并保护。
 
-- 按用户要求移除个人网站自身的作品卡片。公开项目从前端配置维护，当前只有旅行助手；侧边功能名为“小工具”。
-- 旅行助手卡片展示名称、简介、技术标签和SVG预览示意图；整卡原生按钮可点击或按回车打开原生dialog，展示完整说明、功能和GitHub链接。演示地址预留 `/trip/`，等待另一任务部署确认后启用。
-- 详情支持Esc、关闭按钮和遮罩关闭；锁定背景滚动、关闭恢复焦点，重新打开回到顶部。顶部关闭按钮在弹窗内滚动时固定。
-- 生产构建及差异格式检查通过；浏览器约493px窄屏验证详情打开、滚动到底查看入口、Esc关闭和焦点返回；预览图为示意，并非真实行程截图。未验证演示目标服务，未部署、提交或推送。
+## 2026-10-21：部署准备与离线验证
 
-## 2026-10-20：使用旅行助手实际页面截图
+- 首次只读核对时，旧服务健康，但 Node 20.20.2 不满足前端要求、非交互 PATH 未找到 uv；旧脚本没有依赖同步、健康检查、回退或发布锁。旧 Nginx/systemd 仍指向旧目录，`/trip/` 独立。ubuntu 具有广泛 sudo 权限；防火墙/Secrets 等检查均是当时快照，不作为当前状态。
+- 15 项离线部署测试通过，覆盖切换、构建失败、健康/重启/中断回退、回退失败、过期提交、构建时 main 前进、重复发布、锁、初始化/开关、版本/资源、依赖哈希和目录权限。系统命令、网络及构建为模拟；链接和锁使用真实临时目录。
+- 首轮 macOS `/var` 与 `/private/var` 路径别名断言失败，规范化后通过；补充 release 的 0755 遍历权限并重跑通过。统一检查、YAML 与内嵌 shell 语法通过；未安装 actionlint，语法检查不代表真实部署验收。
+- [PR #4](https://github.com/SSpiderLily/personal-web/pull/4) 的 `56a2b6436f9c13401a84a08d66c71bc899ba0197` 在 [运行 39550185995](https://github.com/SSpiderLily/personal-web/actions/runs/39550185995) 通过两版 Python。最终 `ba2f2ed` 的四项检查通过后合并为 `86924b65eec9978fdb8c90f93c7d39d5b7e26367`，远程/本地任务分支当时已清理。此时正式工作流仍只检查，部署草稿尚未启用。
 
-- 按用户要求替换示意图，截取 `http://127.0.0.1:5173/` 实际运行的旅行需求填写页，原始截图1280×720，未调用模型或提交规划。服务器 `/trip/` 的HTTP检查为200，但浏览器读取超时，因此未使用服务器截图。
-- 卡片和详情统一使用 `frontend/src/assets/trip-preview.png`，按原比例完整展示，未使用生成图或模拟页面。说明和图片替代文本同步更新。
-- 生产构建和差异格式检查通过；浏览器确认卡片图片替代文本及详情中的实际首页截图正确，图片按完整比例显示。未部署、提交或推送。
+## 2026-10-21：首次手动发布与 SSH 拉取
 
-## 2026-10-20：启用旅行助手演示入口
+- 用户授权复用 ubuntu；发布 `936d8b26ad0f95f6bd49e9e61d029bc92a6d65ba`，旧代码、Git 与服务配置保留备份，Node/uv 独立安装并核对 Node 官方哈希。
+- GitHub HTTPS fetch 遇到 GnuTLS `(-110)`，首次改传本机 Git bundle 并核对 SHA；依赖下载阻塞改为锁定导出加腾讯 HTTPS 镜像、强制包哈希安装。构建、Gunicorn 配置、临时健康检查和 `nginx -t` 通过后才切换。
+- 公网首页、API、版本标记、JS/CSS、`/trip/` 与其健康接口均 200，版本标记匹配 SHA，旅行助手 index 哈希不变。自动发布当时未开启；旧站点恢复脚本仅语法检查通过，没有执行真实回退。
+- 后续经用户授权复用服务器现有 GitHub SSH 密钥，严格主机核对下 ls-remote 和 fetch 成功，配置改用 SSH；此验证仅证明服务器→GitHub，不证明 Actions→服务器。
 
-- 用户确认旅行助手已完成部署，启用详情中的 `/trip/` 在线演示链接；保留新标签页打开。卡片状态改为可在线体验。
-- 本机Vite开发与生产预览将 `/trip` 原路径转发到 `http://124.223.69.7`，避免本地测试落入个人网站首页；生产构建链接仍是相对路径 `/trip/`。
-- 本轮仅修改个人网站入口和本机代理，真实行程功能等待用户测试；个人网站尚未部署、提交或推送。
-- 验证补充：生产构建和差异格式检查通过；本地代理与公网 `/trip/` 均HTTP 200，但页面标题为“我的个人网站”，加载个人网站原资源 `index-BRZAw1lQ.js`。因此该200不是旅行助手部署成功证据，已告知用户检查服务器路径映射。
+## 2026-10-21：Actions 发布与自动开关
 
-## 2026-10-20：暂缓演示接入并交付展示页面
+- [PR #6](https://github.com/SSpiderLily/personal-web/pull/6) 合并为 `8bccaba03c819338bee4712081993a912f5e42c9`。[手动运行 39553907949](https://github.com/SSpiderLily/personal-web/actions/runs/39553907949) 的 Python 3.13/3.14 检查和 deploy 均成功；runner 登录服务器、服务器 SSH 拉取、构建、切换、重启及版本检查均已实际执行。
+- 服务器 current/REVISION 与公网版本标记均匹配该完整 SHA；首页、API、JS/CSS、`/trip/` 及其健康接口均 200。没有进行真实故障回退或完整旅行规划业务验收。
+- 当时已读回确认仓库 `DEPLOY_ENABLED=true`、服务器 `enabled=true`、production 仅 main，部署变量和 Secrets 已配置。此处是开关启用证据；后续首次 push main 自动发布与用户页面变化验收仍需核对，不能从手动成功推断。
 
-- 用户要求撤销演示接入并推送合并：在线演示恢复禁用，保留准备中提示和后续配置；移除本机 `/trip` 服务器代理。上述启用及路径检查记录保留为历史。
-- 本轮交付包含旅行助手项目列表、实际页面截图、详情弹窗、GitHub链接和侧边“小工具”骰子。用户已明确授权提交、推送及合并；交付提交与合并结果以Git历史为准。
-- 生产构建及差异格式检查通过；已有浏览器验证覆盖卡片/详情、键盘关闭与焦点恢复、真实截图显示和骰子请求。个人网站未部署，线上演示未验收。
+## 2026-10-21：本地白屏恢复
 
-## 2026-10-21：启用已部署的旅行助手入口
+5180 的旧 Vite 进程引用不存在的 Vue 预构建缓存，依赖请求 504。停止旧进程并以 `npm run dev -- --force` 重建后，浏览器正常显示首页、项目与骰子，真实点数请求和 API 代理正常；未修改业务代码或发布。
 
-- 用户授权启用 `/trip/` 演示、验证后推送合并；详情按钮恢复可点击，卡片显示“可在线体验”，相对路径保持 `/trip/`。本机开发/预览代理至 `http://124.223.69.7`，生产环境仍由Nginx提供路径。
-- 生产构建与 git diff --check 通过；公网及本机代理的HTML标题均为旅行助手，JS/CSS资源使用 `/trip/` 前缀并返回200，`/trip/health` 返回健康状态。
-- 浏览器验证详情的演示链接指向 `http://127.0.0.1:5180/trip/`、按钮可点击并保留新标签页属性；内置浏览器未列出新标签页，因此目标页面通过上述HTTP检查确认，不将其计为浏览器跳转验收。
-- 数据库由另一任务确认，未提交规划请求、未验证持久化；本轮未部署个人网站服务器。代码交付以Git提交和PR记录为准。
+## 2026-10-21：悬浮 3D 骰子与九宫格
 
-## 2026-10-21：本地检查与 CI
+- 基线 `a74f5c98668d826282c0757a0cbcbe545eb29fdf`。15 项部署、5 项后端、12 项前端测试以及 Gunicorn 配置和构建通过。审查发现异步 3D 初始化覆盖点数、WebGL 丢失/恢复切换异常两项 P2，均先由真实 Vue 组件测试复现，再修复；另覆盖重复点击、卸载清理、备用显示和减少动态。
+- 浏览器在 1280px 与 493px 下验证九宫格三列且无水平溢出、3D 初始化、真实后端掷骰、详情开关、本地演示仍为 5173，控制台无错误。用户调整位置后，493px 下骰子按钮/提示右缘 48px，项目卡片左缘 56px；受影响测试与构建再次通过。
+- WebGL 切换使用组件模拟通知，没有真实 GPU 故障注入或真实手机验收。用户当时授权检查后提交、推送、合并；实际 PR/合并/部署以 GitHub 历史为准，不把授权本身当作完成。
 
-- 基于远端main `2e63c12` 创建 `codex/local-checks-ci`；开始时工作区干净。服务器只读复核：main为 `fb6fc8f`，额外提交仅新增deploy.sh；个人网站Python为3.14.4、Gunicorn26.2.0、FastAPI0.143.0、Uvicorn0.54.0。未修改线上文件或重启服务。
-- 依赖补齐Gunicorn26.2.0，测试组增加当前Starlette使用的httpx2并更新uv.lock；现有FastAPI/Uvicorn等运行依赖未升级。明确Python支持3.13/3.14，本地默认3.13，Node版本文件固定22.22.1。
-- 原目录Python3.13.7、Node22.22.1、uv0.12.3执行 `bash scripts/check.sh` 成功：锁定依赖安装、5项HTTP契约测试、现有Gunicorn双worker配置检查及Vite生产构建通过。
-- 在不含.venv、node_modules、dist的临时副本中，以Python3.14.7重复完整检查成功，证明该macOS环境可以从锁文件重新安装。并非线上Python3.14.4或GitHub Linux实测。
-- 临时副本将健康接口响应改为错误值，检查脚本返回1、test_health失败，前端安装/构建未执行；临时文件随后恢复。原仓库业务代码未注入故障。
-- bash语法、Workflow YAML解析及Python矩阵、git diff --check通过。CI配置在分支push、main PR及手动触发时执行同一脚本，无SSH/部署步骤，权限仅contents:read。尚未提交或推送，因此GitHub Actions运行及main规则未验证/配置；不能称为已启用合并门禁。
-- 未新增浏览器验收；页面布局、演示跳转、线上回退仍不属于本轮通过范围。Gunicorn --check-config不等于真实多进程HTTP启动测试。
-- README、当前计划及工作区INDEX导航已同步；服务器独有提交、默认Node版本和原地构建问题保留为部署阶段待办。
+## 2026-10-23：后台规划与文档整理
 
-## 2026-10-21：本地联调整理
+- 正式代码静态核对基线为本地 main `bbca380`；后台需求、PostgreSQL 与骰子展示开关已确认，交互草图方向被接受。草图使用内存演示，不能证明正式登录、上传、存储或统计已实现；任务与范围只维护在[后台计划](admin-management-plan.md)。
+- 本轮合并后台重复文档、精简 README 与旧部署记录、更新索引并检查引用和文档差异；按用户要求归档已实现的部署阶段，并保留未核实验收事项。未运行应用、构建或业务测试，未连接生产环境、安装数据库、提交、推送或发布。
 
-- 移除生产/trip代理，开发模式默认演示地址为本机5173，生产构建为/trip/；新增build:local、preview:local输出到dist-local，开发环境示例及忽略规则。
-- check.sh通过：5项HTTP测试、Gunicorn配置、锁定依赖安装与生产构建；本地构建通过。产物确认生产包不含本机5173，本地包包含5173且不含生产IP。
-- 临时5199开发/4199预览通过HTTP访问实际本机8010健康接口；确认不存在生产/trip代理。首次测试在服务器创建后替换代理未生效，模拟响应断言失败，改用真实本地后端后通过。关闭测试开发服务产生预构建取消提示，不计为功能失败。
-- 未调用生产服务或生成行程，未验证完整浏览器交互或GitHub运行。README、计划、INDEX同步；未提交、推送或修改线上。
+## 2026-10-23：本地 PostgreSQL 安装检查
 
-## 2026-10-21：GitHub CI首次验证
+- `/Library/PostgreSQL/17/bin/psql --version` 返回 17.11；安装目录包含独立数据目录。`/Library/LaunchDaemons/postgresql-17.plist` 设置 `RunAtLoad=true`，由系统用户 postgres 启动，未验证重启电脑后的实际行为。当前助手命令行 PATH 未找到 psql，可使用完整路径。
+- 沙箱内 TCP 检查被系统拒绝；在授权的沙箱外只读检查中，`pg_isready -h 127.0.0.1 -p 5432` 返回 accepting connections。助手首次使用 postgres 账号连接返回 no password supplied。随后用户在本机终端输入密码执行 `SELECT version();`，提供的输出确认服务端为 PostgreSQL 17.11、aarch64，管理员密码认证和查询成功；助手未读取或索取密码。现有数据库/角色及项目账号的读写权限仍未验证。
+- 静态检查后端依赖与源码，当前未声明 PostgreSQL 驱动、数据库连接或迁移配置。本轮未创建账号或数据库、未修改数据库配置或业务代码、未连接生产环境、未提交、推送或发布；项目现有未提交改动保留。
 
-- 用户授权提交、推送和创建PR，不合并、不部署。功能提交6375eaf已推送至codex/local-checks-ci，PR：https://github.com/SSpiderLily/personal-web/pull/3 。
-- PR触发运行：https://github.com/SSpiderLily/personal-web/actions/runs/39548296023 。Ubuntu 24.04上Python 3.13和3.14两项检查全部成功，包含环境准备、锁定依赖安装、5项接口测试、Gunicorn配置检查和生产构建。无须修复CI。
-- 本条记录针对6375eaf；文档同步提交的状态另以PR最新检查为准。主分支保护、合并、部署和旅行助手完整交互不在本次验证范围。
+## 2026-10-23：数据库部署位置调整
 
-## 2026-10-21：main 合并后自动部署只读核查
+- 用户明确改为在云服务器安装数据库并创建开发库和生产库，当前安排见[后台计划](admin-management-plan.md)。本轮核对 PostgreSQL 官方 Ubuntu 软件源、建库/授权和 SSH 隧道文档并提供操作指导；没有登录云服务器，云端系统、资源、现有实例、安装、数据库创建、权限、隧道和备份均未验证。未修改数据库或业务代码，未提交、推送或发布。
 
-- GitHub main 为 6729e9f，push CI 运行 39548672670 成功：https://github.com/SSpiderLily/personal-web/actions/runs/39548672670 。远程 .github/workflows 仅 ci.yml，只有 check 作业，没有部署。
-- SSH 只读检查：服务器仍为 fb6fc8f，父提交为 2e63c12；工作区无未提交改动。未在服务器执行 fetch/pull。服务器 origin/main 是旧的本地跟踪引用，不能用 ahead 1 判断与当前 GitHub 的完整差距。
-- deploy.sh 仅 git pull origin main、npm run build、sudo systemctl restart；没有依赖同步、健康检查、回退和发布锁。Node 为 20.20.2，不满足 frontend engines >=22.12；非交互 PATH 未找到 uv。
-- fastapi-personal-web active，127.0.0.1:8000/api/health 返回 status=ok。systemd 直接引用 /opt/personal-web/backend/.venv；nginx -T 确认个人网站 root 为 /opt/personal-web/frontend/dist，/trip 独立指向 trip-planner 目录和8001端口。
-- ubuntu 无 crontab，root crontab 仅看到云厂商维护任务；systemd timers、cron及服务名筛查未发现个人网站自动部署入口。未读取 GitHub Secrets/Webhooks 或云安全组，因此不声称它们不存在。
-- ubuntu 具有 NOPASSWD: ALL，自动部署方案需另设受限权限。不读取或输出私钥、令牌。未修改线上配置、未构建、未重启、未触发 Actions。仅更新本地说明和计划，未提交或推送。
+## 2026-10-23：云端 PGDG 下载失败
 
-## 2026-10-21：部署草稿本地验证
+- 用户提供的 apt 输出显示使用 resolute-pgdg/main amd64，postgresql-17、postgresql-client-17 和 libpq5 下载失败；IPv6 报 Network is unreachable，IPv4 连接 146.75.115.52:443 超时。证据指向软件源下载链路问题，具体网络原因及安装后的服务状态未确认，不能据此认定仅为 IPv6 问题。
+- 助手侧对 `https://repo.huaweicloud.com/postgresql/repos/apt/dists/resolute-pgdg/InRelease` 执行限时 IPv4 HEAD 请求返回 HTTP 200；不代表云服务器可达、镜像包已同步或安装成功。提供先测连通性、备份并仅替换 PGDG 源地址、保留签名校验再重试的步骤，执行结果待用户反馈。未连接或修改云服务器。
 
-- 新增 scripts/deploy.py、ops/ci-deploy.yml.draft、配置/服务/Nginx/sudoers 示例及 tests/test_deploy.py；保留原 .github/workflows/ci.yml 不变。工作流不在扫描目录中；脚本默认不执行，配置 enabled 默认 false。
-- 15项离线测试通过：成功切换、构建失败不切换、健康/重启失败回退、中断回退、回退失败不报成功、过期SHA拒绝、构建期间main前进不切换、重复发布、文件锁、初始化缺失、双重执行开关、非法SHA、API/静态版本/资源检查、锁文件安装及发布目录权限。服务、网络和构建命令为模拟；链接切换和文件锁使用真实本地临时目录。
-- 首轮测试因 macOS /var 与 /private/var 的路径别名断言失败，规范化测试临时目录后通过；复核补齐 release 目录0755权限，防止Nginx无法遍历，再次运行15项通过。
-- bash scripts/check.sh 完整通过：部署离线测试、5项后端HTTP契约测试、Gunicorn配置检查、npm ci及Vite生产构建。新权限调整后重跑受影响的部署测试通过。
-- Ruby YAML解析、部署作业needs/cancel配置断言、内嵌bash -n及git diff --check通过。未安装actionlint，未在GitHub实际运行草稿；不将语法检查描述为GitHub兼容性或真实部署验收。
-- 未连接生产服务器、未修改线上、未触发Actions；未提交或推送。本地README、计划及工作区INDEX导航已同步。服务器初始化、专用账号/SSH、工具路径、GitHub Environment/变量/Secrets、首次发布与回退验收仍待单独授权。
+- 后续用户执行停用 pgdg.sources/pgdg.list 的指导，提供的 `apt update` 输出仅有腾讯 Ubuntu resolute 系列源和 NodeSource，均为 Hit，本次无下载错误；193 packages can be upgraded 仅为可升级提示。`pg_lsclusters` 只返回表头，未列出集群；未提供服务端包安装结果，不能确认已安装或运行。下一步安装 Ubuntu 源的 postgresql 包并重新检查；尚未建库或验证云端连接。
 
-## 2026-10-21：部署草稿提交与 PR CI
+## 2026-10-23：云端 PostgreSQL 服务安装成功
 
-- 用户授权创建分支、提交推送与创建PR，不合并、不修改线上；分支 codex/deploy-drafts，功能提交56a2b6436f9c13401a84a08d66c71bc899ba0197，PR https://github.com/SSpiderLily/personal-web/pull/4 。
-- PR CI运行39550185995的Python3.13/3.14两个作业均success：https://github.com/SSpiderLily/personal-web/actions/runs/39550185995 。包含离线部署保护测试、接口测试、Gunicorn配置检查和前端构建；不代表真实部署验收。
-- 现行.github/workflows/ci.yml未更改；草稿仍位于ops/ci-deploy.yml.draft，配置enabled=false；未连接生产服务器、未开启部署。本记录同步产生的后续提交应以PR最新检查结果为准。
+- 用户提供的 `pg_lsclusters` 输出为 `18 main 5432 online postgres`，数据目录 `/var/lib/postgresql/18/main`，日志 `/var/log/postgresql/postgresql-18-main.log`，证明云端 PostgreSQL 18 集群运行。未提供服务端具体小版本、密码登录、监听范围、项目账号/数据库或备份证据；相关项仍待验证。
+- 下一步指导用户创建独立开发/生产账号与数据库并校验连接及跨库权限。本轮仅依据用户输出更新文档，未登录或修改云服务器、未接入后端、未提交、推送或发布。
 
-## 2026-10-21：PR #4 合并与分支清理
+## 2026-10-23：云端建库与账号登录反馈
 
-- 浏览器核实最终提交 ba2f2ed 的4项检查全部通过、无冲突，然后合并 PR #4，合并提交86924b65eec9978fdb8c90f93c7d39d5b7e26367。GitHub自动删除远程codex/deploy-drafts。
-- 本地fetch --prune，确认分支是origin/main祖先后快进更新main并安全删除本地分支；远程分支列表仅main。本次未连接生产服务器或执行部署。
-- 现行CI和部署配置相对PR最终提交无差异，仍只有check作业、enabled=false。合并后main的CI结果本轮未核实。
-- 合并记录通过后续文档 PR 同步；该文档 PR 的提交、CI及合并结果以 GitHub 历史为准，避免为记录文档自身的合并反复产生新提交。
+- 用户明确反馈开发库、生产库均已创建且可以登录；本轮没有提供具体命令输出，按用户确认记录，不等同于助手独立复验。账号命名与权限设置未再次核对，跨库访问限制、读写与迁移仍待验证。
+- 提供 Mac 通过本机 127.0.0.1:15432 SSH 转发至云服务器 127.0.0.1:5432 的连接步骤；隧道和本地查询结果待用户反馈。未修改云服务器、数据库或业务代码，未提交、推送或发布。
 
-## 2026-10-21：首次部署配置只读核查
+## 2026-10-23：统一配置模块与本地环境配置
 
-- SSH只读核查账号、指定目录、工具版本、systemd和Nginx配置、磁盘内存与健康接口。服务器仍为fb6fc8f，未fetch/pull；新账号与部署目录/配置/脚本不存在，Node20.20.2，Python3.14.4，未找到PATH内uv；服务健康。
-- 浏览器核实GitHub没有Environment、Secrets、Variables；经典分支保护页未列规则，Rulesets API返回[]。腾讯云当前实例124.223.69.7防火墙允许全部IPv4访问TCP22/80/443/14647及ICMP；未编辑规则。主机UFW inactive。
-- 服务器到GitHub返回301、npm/PyPI返回200，仅证明这些HTTP入口可达，不证明完整安装成功或runner SSH可用。通过现有SSH读取主机公钥指纹，未读取私钥。待操作顺序已同步计划，未提交推送或改动线上配置。
+- 用户授权采用统一 Settings、本地 .env 与服务器外部 app.env 的简化方案；本次仅实现本地配置和模块，生产提供操作步骤。本轮在 codex/centralized-settings 分支保留此前未提交文档改动，未登录生产服务器，未提交、推送或发布。
+- 新增 DEBUG 行为测试先得到 False，复现原代码不读取配置，再实现集中读取、固定文件路径、环境变量优先、生产/test 忽略本地文件、生产参数与 debug 校验，以及错误文本隐藏输入值。增加 pydantic-settings 2.16.1 和 python-dotenv 1.2.4，声明及锁文件同步，原依赖版本未变。
+- Python 3.13.7 / Node 22.22.1 执行 bash scripts/check.sh 成功：15 项离线部署保护、16 项后端、12 项前端测试，Gunicorn 配置检查和前端构建全部通过。本轮未额外验证 Python 3.14 或真实浏览器交互。
+- 从临时工作目录读取实际配置，确认 development / 127.0.0.1 / 15432 / personal_web_dev / debug=True；密码只报告是否已填，结果为否，不打印原文。实际 .env 权限 0600，git check-ignore 确认被忽略；两份模板无真实凭据。
+- 独立审查未发现需修复的行为缺陷，额外确认生产异常的 str/repr 不含虚构密码，README 首次 systemd 操作与现有发布流程相容。README 已记录本地用法和生产首次步骤，INDEX 用途说明同步。
+- 未安装数据库驱动、连接真实数据库或执行迁移。云端 SSH 隧道、跨库权限、真实 systemd 配置加载及备份仍未验证；配置测试不代表数据库接入或生产验收通过。
 
-## 2026-10-21：首次手动部署完成（简化方案）
+## 2026-10-23：本地经 SSH 隧道验证云端开发库
 
-- 用户明确同意复用现有账号完成手动部署，暂不启用自动部署。发布SHA936d8b26ad0f95f6bd49e9e61d029bc92a6d65ba；GitHub main CI成功，本机ls-remote确认相同SHA。
-- 原站点fb6fc8f及其虚拟环境/dist保留；旧Git bundle和systemd/Nginx配置保存于/opt/personal-web-deploy/backups/first-deploy-20261021。项目工具独立安装Node22.22.1和uv0.12.3，Node官方SHA256校验通过。
-- 服务器GitHub fetch失败：GnuTLS recv error (-110)，改为传送本机main Git bundle并核对SHA。uv默认下载阻塞后，导出锁定requirements，使用腾讯HTTPS镜像和--require-hashes安装15个生产包。Gunicorn配置、npm ci/build及临时127.0.0.1:18010健康检查通过，临时进程已退出。
-- 最终release为/opt/personal-web-deploy/releases/936d8b26ad0f-797kf948，运行Python3.14.4。仅替换个人网站systemd路径和Nginx root，用户仍ubuntu；nginx -t通过后重启个人网站并重载Nginx。
-- 脚本健康验证通过；本机公网GET /、/api/health、/__release.txt、JS/CSS、/trip/、/trip/health均200，版本标记匹配完整SHA；旅行助手index哈希不变。不推断完整旅行规划业务已验收。
-- GitHub自动部署未启用，服务器配置enabled=false；未修改GitHub设置。旧版本恢复脚本已保存并bash -n通过，未执行真实回退。初始化脚本为一次性程序，通用部署草稿未解决此次网络问题。
-- 本地README、执行计划和本记录更新，未提交或推送。
+- 用户已在本机填写开发密码并授权验证。助手通过 get_settings() 读取配置，只核对 development / 127.0.0.1:15432 / personal_web_dev 数据库及账号；密码不进入命令或输出，使用 0600 临时 pgpass 文件并在测试后自动删除。
+- 首次连接返回 Connection refused，尚未进入数据库认证；本机 15432 没有监听。随后以已记录的主机 124.223.69.7 和现有 SSH 身份，在严格已知主机校验下建立临时 SSH 隧道，仅转发本机 15432 至服务器 127.0.0.1:5432，没有执行远程命令或修改服务器配置。
+- psql 强制 default_transaction_read_only=on，查询返回 PostgreSQL 18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)、数据库和账号 personal_web_dev、服务端地址 127.0.0.1/32、端口 5432、read_only=on；退出码 0。public schema CREATE 权限为 true，生产库 CONNECT 权限为 false；这仅验证权限元数据，未实际写入或连接生产库。
+- 助手测试完成后关闭了当次临时 SSH 会话。当时需要手动保持隧道；后续已由本地自动启动入口替代，现行操作见 README。15432 为 Mac 入口，不是云防火墙端口。用户截图显示云防火墙已允许全部 IPv4 访问 5432，本轮未修改该规则，也未据此推断 PostgreSQL 的实际公网监听状态。
+- README 补充端口关系，计划同步已验证项。仍未接入后端数据库驱动或迁移，未验证实际读写、生产账号反向隔离、生产应用加载配置或备份；未提交、推送或发布。
 
-## 2026-10-21：服务器通过 SSH 拉取 GitHub
+## 2026-10-23：本地启动自动建立 SSH 隧道
 
-- 用户明确指定复用服务器已有SSH密钥。以ubuntu执行BatchMode、StrictHostKeyChecking=yes的git ls-remote及真实git fetch均成功，main为936d8b26ad0f95f6bd49e9e61d029bc92a6d65ba；未读取私钥。
-- /etc/personal-web/deploy.json的repository改为git@github.com:SSpiderLily/personal-web.git，enabled仍false。仅更新代码缓存，未切换current、构建、重启或重新部署。
-- 本地配置示例、README及计划同步；未提交推送。此连接为服务器到GitHub，不等同于GitHub Actions到服务器的登录配置。
+- 用户要求本地启动时自动建立隧道，省去单独 SSH 终端。新增 scripts/dev.sh 与仅显式调用的 app.dev，合并 SSH 与 Uvicorn reload；前端仍单独启动，生产入口不运行网络逻辑。Settings 集中声明 DEV_SSH_HOST/USER/PORT、DEV_DB_REMOTE_PORT 和 DEV_BACKEND_PORT，开发模板与现有本地 .env 的缺失非敏感项同步，原密码不显示且保持不变，.env 仍为 0600 且被 Git 忽略。
+- 实际运行 bash scripts/dev.sh：自动 SSH 隧道就绪，8010 的 /api/health 返回 200；从本地配置读取凭据，经 15432 用 psql 强制只读查询，返回 PostgreSQL 18.6、personal_web_dev 数据库/账号和服务端 5432，退出码 0。临时密码文件 0600 且自动删除，密码不进入参数或输出。重复启动返回端口占用错误和退出码 1，原后端仍健康；Ctrl+C 后退出码 0，15432 和 8010 均释放。
+- 独立审查发现两项生命周期问题，并均先由失败测试复现后修复：真实 ssh -G 展示继承后台化设置，现强制前台并禁用共享 master；真实受控父/子进程复现父进程退出后仍有 worker 占端口，现等待整个自有进程组并在宽限期后强制清理。进程释放测试短轮询端口，避免把 SIGKILL 的调度延迟误判为残留。审查复核通过；修复后再次实际启动与停止正常。
+- 最终 bash scripts/check.sh 通过：15 项部署保护、26 项后端、12 项前端测试，以及 Gunicorn 检查和前端构建。新增用例不访问云端，使用模拟子进程、临时 SSH 配置或受控本地进程；实际云端验证单独记录于上一条。未额外验证 Python 3.14 和真实浏览器交互。
+- README 默认后端启动已改为自动入口，INDEX 的用途说明同步；本次计划子步骤完成。没有新增数据库驱动或迁移，没有写数据库、修改生产服务器配置、提交、推送或发布。测试启动的服务和隧道均已停止。
 
-## 2026-10-21：自动部署接入准备
+## 2026-10-23：云端开发库初始表结构
 
-- 用户授权完成余下自动部署步骤。脚本改为uv export --locked导出生产依赖，再通过配置镜像使用uv pip sync --require-hashes安装；SSH fetch启用非交互、严格主机核对和连接超时。
-- 现行CI新增needs:check部署作业，仅main push且开关true或显式手动deploy输入才运行；草稿已迁入正式工作流，不保留副本。并发不取消正在发布的任务。
-- 本地15项部署测试、5项HTTP测试、Gunicorn检查与Vite构建通过；YAML解析和内嵌bash语法检查通过。
-- production环境仅main，配置专用Actions登录密钥（加密保存在环境Secret）、核实的主机公钥和仓库变量。已从本机用此密钥登录ubuntu成功；并非runner验收。自动开关暂false，后续真实发布结果继续记录。
-
-## 2026-10-21：Actions真实发布验收及自动部署开启
-
-- PR #6合并提交8bccaba03c819338bee4712081993a912f5e42c9。手动workflow_dispatch运行 https://github.com/SSpiderLily/personal-web/actions/runs/39553907949 的Python3.13/3.14及deploy三个作业均success。
-- 实际由GitHub runner使用production环境密钥登录ubuntu，服务器通过自身GitHub SSH密钥fetch，执行锁定依赖镜像安装、前端构建、切换和重启。服务器current/REVISION及公网/__release.txt均为8bccaba完整SHA。
-- 公网首页、/api/health、版本标记、JS/CSS、/trip/和/trip/health均200。此前离线回退测试通过，但未对线上故意注入故障，不能声称真实回退已演练。
-- 验收后通过API将仓库DEPLOY_ENABLED设为true并读回确认；服务器enabled=true。production分支策略仅main；变量DEPLOY_HOST/DEPLOY_USER已设，环境Secrets包含DEPLOY_SSH_KEY和DEPLOY_KNOWN_HOSTS。
-- 本次验收文档PR合并会触发首次push main自动发布；其最终CI、部署、分支清理证据以GitHub历史及任务交付结果为准，不循环追加文档提交。用户后续自行验证可见页面改动。
-
-## 2026-10-21：本地预览白屏恢复
-
-本机5180的Vite旧进程引用的Vue预构建缓存已不存在，依赖请求返回504，首页HTML可访问但应用未渲染。停止旧前端进程，以`npm run dev -- --force`重启并重建缓存后，浏览器已显示首页、项目列表与骰子，点击骰子返回点数；代理健康接口和骰子接口正常。本次仅恢复本地运行环境，未修改应用代码或发布线上。
-
-## 2026-10-21：悬浮3D骰子与九宫格
-
-- 基线：从远程main拉取，提交a74f5c98668d826282c0757a0cbcbe545eb29fdf已是最新；新建codex/floating-3d-dice-tool-grid。保留此前本地白屏验证日志改动；该轮验证时尚未提交、推送、合并或部署。
-- 技术验证：15项部署测试、5项HTTP契约测试、12项Node前端测试、Gunicorn配置及生产构建全部通过；前端测试纳入统一scripts/check.sh和现有CI。骰子3D代码单独分块，不在前端生成点数。
-- 浏览器：本机5180的正式页面1280px和493px均显示九个占位、三列网格且无水平溢出。3D画布已初始化，真实后端掷骰子交互成功；项目详情正常打开/关闭，本地演示地址仍指向5173。控制台无错误。
-- 独立审查发现2项P2问题：异步3D加载覆盖已获得点数、WebGL上下文丢失/恢复未切换备用显示。真实Vue组件回归测试分别复现失败后修复，通过12项测试。额外验证重复点击只请求一次、卸载取消及释放场景、减少动态偏好。
-- 验证边界：WebGL切换在组件测试中模拟通知，未做真实GPU上下文丢失故障注入；未做真实手机设备验收。用户随后授权检查完成后提交、推送并合并；真实手机和GPU故障专项验证不作为本次已完成范围。
-
-### 左侧位置调整
-
-按用户反馈将骰子向左贴边，按钮及简短点数提示固定在x=4～48px，内容左侧至少预留56px。493px浏览器实测骰子按钮和提示右缘48px，项目卡片左缘56px，无水平溢出；12项前端测试和生产构建通过。
-
-### 提交与合并前检查
-
-用户已授权检查完成后提交、推送并合并。本地最终32项测试（15部署、5后端、12前端）、Gunicorn配置和生产构建通过；独立审查的2项P2已修复，随后左侧间距调整已验证。使用说明已进入README，删除完成的临时功能计划；实际PR、合并提交与自动发布结果以GitHub记录和任务交付为准，不为更新文档自身的Git状态循环提交。
+- 用户授权按已审阅草案在开发库建表。经现有 SSH 身份、严格主机核验和临时本地转发，只连接 personal_web_dev 数据库及同名账号，服务端为 127.0.0.1:5432、PostgreSQL 18.6；建表前 public 无业务对象，账号有 CREATE 权限。本轮不连接生产库、不修改服务器配置。
+- 新增 backend/migrations/001_admin_schema.sql 与 apply_dev.sql，单事务创建十张业务表、相关主键/外键/检查/索引，另建 schema_migrations 记录版本。实际迁移版本 001_admin_schema，SQL SHA-256 为 b47c9141e0b42926660dc7002230910a1b7254e76a516f824f9650c4672b6d1c，记录时间为 2026-10-23 23:22:43（上海时间）。详情块和截图的位置唯一约束可延迟，默认立即检查。
+- 先运行断言确认缺表失败；随后试建并回滚成功，确认仍为零表；正式建表后再运行 migrations/tests/verify_dev.sql，通过单管理员/资料、令牌摘要长度与过期、文件大小及引用保护、不完整草稿、项目状态、块字段互斥、位置唯一及延迟交换、截图重复、JSON 数组、工具位置、每日/跨日人数去重及级联约束检查。测试使用显式项目/块/截图 ID，不消耗其身份序列；所有测试记录回滚。最终只读核对恰有十张空业务表和一张版本表、一个版本记录。
+- 相同版本及校验和重复执行成功跳过；错误、缺失、非法校验和均拒绝，退出码 3。验证时发现 psql 17 忽略 \quit 的退出码参数，已改为 ON_ERROR_STOP 下抛出 SQL 异常并复验。初次文件删除验证因 PostgreSQL RESTRICT 使用独立错误类别而中断，事务自动回滚；补充该错误类别后通过。断言片段增加执行入口检查，避免单独误运行提交测试记录。
+- 现有后端 26 项 unittest 全部通过；首次在沙箱中因回环端口绑定限制导致 test_stop_process_cleans_worker_after_parent_already_exited 报 PermissionError，放开该环境限制后全套通过。SQL 变更未触及应用、前端或部署入口，本轮未重复前端构建、真实浏览器或生产验收。
+- 迁移、README 用法、后台计划与工作区 INDEX 已同步。凭据仅由既有配置读取，临时 0600 密码文件自动删除，SSH 会话已停止；未创建真实管理员或初始化网站内容。应用驱动/连接、业务接口、生产配置、反向账号隔离、独立测试实例与备份恢复仍未完成。未提交、推送或发布。

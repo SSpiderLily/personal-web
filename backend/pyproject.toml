@@ -2,7 +2,12 @@
 name = "personal-web-backend"
 version = "0.1.0"
 requires-python = ">=3.13,<3.15"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "gunicorn==26.2.0"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "gunicorn==26.2.0",
+    "pydantic-settings>=2,<3",
+]
 
 [dependency-groups]
 dev = ["httpx2>=2,<3"]

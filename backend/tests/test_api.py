@@ -1,9 +1,14 @@
 """HTTP contract checks; TestClient makes no requests to production."""
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from app.main import app
+with patch.dict(os.environ, {"APP_ENV": "test", "DEBUG": "false"}):
+    from app.main import app
 
 
 class ApiTests(unittest.TestCase):
@@ -46,6 +51,20 @@ class ApiTests(unittest.TestCase):
 
     def test_dice_requires_post(self):
         self.assertEqual(self.client.get("/api/dice/roll").status_code, 405)
+
+
+class SettingsIntegrationTests(unittest.TestCase):
+    def test_fastapi_reads_debug_from_environment(self):
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(("APP_", "DB_")) and key != "DEBUG"}
+        env.update(APP_ENV="test", DEBUG="true")
+        result = subprocess.run(
+            [sys.executable, "-c", "from app.main import app; print(app.debug)"],
+            cwd=Path(__file__).resolve().parents[1], env=env,
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "True")
 
 
 if __name__ == "__main__":
