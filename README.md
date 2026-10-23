@@ -50,11 +50,20 @@ uv run --locked python -c 'from app.settings import get_settings; s = get_settin
 
 test、production 模式完全忽略本地 `.env`。生产必须显式提供 DB_HOST、DB_PORT、DB_NAME、DB_USER、非空 DB_PASSWORD，且 DEBUG=false；缺失或非法值会阻止启动，错误文本不显示输入值。配置密码使用 SecretStr 包装，不在对象显示或配置 JSON 中输出；不要主动记录其原文或完整验证错误数据。
 
-当前已实现配置读取、FastAPI debug 接入和本地自动隧道启动，尚未在应用中新增数据库驱动、数据库连接或迁移。开发环境允许密码暂空，现有公开接口仍不访问数据库；填写数据库参数本身不会建立连接。自动检查使用 APP_ENV=test，配置测试只使用临时文件和虚构凭据。
+现已提供 psycopg 连接与事务作用域：`app.database.connection()` 用于独立读取，`transaction()` 用于原子写入；正常退出提交，异常回滚，退出关闭连接。配置仅经 Settings/get_settings() 读取，非空的 libpq PG* 连接/会话环境覆盖会在建连前被拒绝，请清除这类变量并使用 DB_* 配置。模块导入不连接、不建隧道、不迁移；现有公开接口仍不访问数据库，真实后台业务尚未实现。开发环境建连前需填写密码；test 模式只允许专用本地 personal_web_test_* 目标，不能使用默认开发库。
 
 ## 开发库迁移
 
-初始字段、外键和约束以 `backend/migrations/001_admin_schema.sql` 为准。`apply_dev.sql` 是 psql 执行入口，仅允许 `personal_web_dev` 数据库和同名账号；十张业务表之外，`schema_migrations` 保存版本及 SHA-256。迁移在单个事务内执行，失败回滚；相同版本及校验和重复执行时跳过，不覆盖业务数据。已执行的迁移文件不可再修改，结构变更另建后续迁移。版本跳过不自动修复手工改表造成的结构偏移。
+从项目根目录启动 `bash scripts/dev.sh` 保持开发隧道运行后，在另一终端执行版本迁移：
+
+```sh
+cd backend
+uv run --locked python -m app.migrate
+```
+
+入口只接受明确的开发库/同名账号，或隔离测试目标；production 在连接前拒绝。迁移与历史记录使用同一事务和串行锁，历史必须与文件版本及 SHA-256 一致；重复执行无变化，任何待执行版本失败则整批回滚。已执行文件不可修改，新结构另加 `NNN_name.sql`；迁移文件不含事务控制语句，不支持事务外操作，不自动修复手工结构漂移。此命令不自动随应用启动执行，也不用于生产部署。
+
+兼容的 psql 入口仅处理初始 001，后续版本使用上面的 Python 入口。初始字段、外键和约束以 `backend/migrations/001_admin_schema.sql` 为准。`apply_dev.sql` 是 psql 执行入口，仅允许 `personal_web_dev` 数据库和同名账号；十张业务表之外，`schema_migrations` 保存版本及 SHA-256。迁移在单个事务内执行，失败回滚；相同版本及校验和重复执行时跳过，不覆盖业务数据。已执行的迁移文件不可再修改，结构变更另建后续迁移。版本跳过不自动修复手工改表造成的结构偏移。
 
 保持本地开发启动入口建立的 SSH 隧道运行后，从项目根目录执行以下命令。`psql` 需在 PATH 中；本机客户端为 `/Library/PostgreSQL/17/bin/psql`，可用此完整路径替换。密码仅在交互提示中输入，不写入命令或 Git。
 
@@ -78,7 +87,7 @@ psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_E
 - 小工具：`ToolGrid.vue` 目前仅九个占位图标；`DiceGame.vue` 是独立悬浮骰子，点数由 `POST /api/dice/roll` 生成，不保存数据。支持减少动态偏好、超时重试和 WebGL 不可用时的简化显示；动画与点数逻辑在 `frontend/src/dice/`。
 - 健康与个人信息接口分别为 `GET /api/health`、`GET /api/profile`。后端接口定义和字段以代码为准。
 
-## 检查与预览
+- 后台页面准备：开发环境访问 `/admin` 可进入本地演示，生产构建只显示待接入说明。演示不输入真实密码、不保存会话、不读写业务数据；刷新或退出即清除。\n\n## 检查与预览
 
 在项目根目录执行 `bash scripts/check.sh`。它安装锁定依赖，运行部署保护、后端和前端测试，检查 Gunicorn 配置，再构建前端；会更新 `.venv`、`node_modules` 和构建产物，不启动常驻服务、不调用线上 API。首次安装需要联网，不在生产服务器上直接运行该脚本。
 
@@ -87,6 +96,17 @@ psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_E
 - 旅行助手演示：开发与本地构建预览默认指向本机 5173，需另启旅行助手服务（前端 5173、后端 8000）；个人网站不代理到生产服务。生产构建使用 `/trip/`。普通 `npm run preview` 预览生产产物，本机没有生产 Nginx 的 `/trip/` 路由，不能用它验收演示跳转。
 - 覆盖本地演示地址：将 `frontend/.env.development.example` 复制为 `.env.development.local`，修改 `VITE_TRIP_DEMO_URL` 后重启或重新构建。勿写入通用 `.env.local`；`VITE_` 会进入浏览器，不存放密钥。填写线上地址会访问真实服务。
 - 依赖变更时同步声明与锁文件：后端 `pyproject.toml` / `uv.lock`，前端 `package.json` / `package-lock.json`。修改页面后另查桌面、窄屏、详情和骰子交互，构建通过不代表这些体验已验收。
+
+
+数据库专项另执行：
+
+```sh
+bash scripts/test-db.sh
+# 如需指定本机 PostgreSQL 工具目录：
+PG_BIN=/Library/PostgreSQL/17/bin bash scripts/test-db.sh
+```
+
+该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通统一检查会明确跳过真实 PostgreSQL 用例，必须另跑此专项才能验收数据库功能。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，Linux 工具发现逻辑尚未实测；云端开发库 18.6 仅做新驱动只读冒烟。
 
 ## 发布与恢复
 
