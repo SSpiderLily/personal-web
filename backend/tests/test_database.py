@@ -1,5 +1,8 @@
 """Offline safety checks. Network boundary doubles must never reveal credentials."""
+import os
+import socket
 import subprocess
+import threading
 import sys
 import unittest
 from unittest.mock import patch
@@ -60,3 +63,59 @@ class DatabaseSafetyTests(unittest.TestCase):
                 database, 'connection', side_effect=AssertionError('production connected')):
             with self.assertRaises(migrate.MigrationError):
                 migrate.apply_migrations()
+
+    def test_libpq_hostaddr_cannot_redirect_settings_to_another_address(self):
+        # A real IPv4 listener detects libpq overriding the configured IPv6 target.
+        accepted = threading.Event()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            listener.settimeout(.3)
+            def accept_probe():
+                try:
+                    client, _ = listener.accept()
+                    accepted.set()
+                    client.close()
+                except TimeoutError:
+                    pass
+            probe = threading.Thread(target=accept_probe)
+            probe.start()
+            settings = Settings(app_env='test', db_host='::1', db_port=listener.getsockname()[1],
+                                db_name='personal_web_test_probe', db_user='personal_web_test', db_password='dummy')
+            rejected = False
+            try:
+                with patch.dict(os.environ, {'PGHOSTADDR': '127.0.0.1'}):
+                    try:
+                        with database.connection(settings):
+                            self.fail('libpq environment override must be refused')
+                    except database.DatabaseTargetError:
+                        rejected = True
+                    except database.DatabaseUnavailable:
+                        pass
+            finally:
+                probe.join(timeout=1)
+            self.assertFalse(accepted.is_set(), 'libpq reached the IPv4 address absent from Settings')
+            self.assertTrue(rejected, 'hidden libpq configuration must be rejected explicitly')
+
+    def test_libpq_environment_is_rejected_without_values_or_environment_mutation(self):
+        import psycopg
+        settings = Settings(app_env='development', db_password='dummy')
+        for name in ('PGHOSTADDR', 'PGSERVICE', 'PGSERVICEFILE', 'PGSYSCONFDIR',
+                     'PGPASSWORD', 'PGPASSFILE', 'PGSSLMODE', 'PGOPTIONS', 'PGTZ'):
+            with self.subTest(name=name), patch.dict(os.environ, {name: 'private-override-value'}):
+                before = dict(os.environ)
+                with patch.object(psycopg, 'connect', side_effect=AssertionError('driver must not receive hidden configuration')):
+                    with self.assertRaises(database.DatabaseTargetError) as caught:
+                        with database.connection(settings):
+                            pass
+                self.assertNotIn('private-override-value', str(caught.exception))
+                self.assertEqual(dict(os.environ), before)
+
+    def test_test_target_refuses_comma_separated_host_before_driver(self):
+        import psycopg
+        settings = Settings(app_env='test', db_host='/tmp/owned,remote.example', db_port=25432,
+                            db_name='personal_web_test_probe', db_user='personal_web_test')
+        with patch.object(psycopg, 'connect', side_effect=AssertionError('multihost driver call')):
+            with self.assertRaises(database.DatabaseTargetError):
+                with database.connection(settings):
+                    pass
