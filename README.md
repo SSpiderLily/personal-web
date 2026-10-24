@@ -1,6 +1,6 @@
 # 个人网站
 
-Vue 3 + Vite 展示个人信息、旅行助手项目和小工具占位，FastAPI 提供个人信息与骰子点数。业务接口尚未接入数据库，登录和管理后台尚未实现。
+Vue 3 + Vite 展示个人信息、旅行助手项目和小工具占位，FastAPI 提供个人信息与骰子点数。公开业务接口仍使用现有数据；后台已接通单管理员真实登录、会话和受保护框架，业务编辑模块待后续接入。
 
 后台需求与进度见[后台计划](docs/admin-management-plan.md)；既有部署历史与未核实事项见[部署归档](docs/archive/2026-10-21-auto-deployment-plan.md)；测试与发布证据见[验证记录](docs/validation-log.md)。
 
@@ -50,7 +50,7 @@ uv run --locked python -c 'from app.settings import get_settings; s = get_settin
 
 test、production 模式完全忽略本地 `.env`。生产必须显式提供 DB_HOST、DB_PORT、DB_NAME、DB_USER、非空 DB_PASSWORD，且 DEBUG=false；缺失或非法值会阻止启动，错误文本不显示输入值。配置密码使用 SecretStr 包装，不在对象显示或配置 JSON 中输出；不要主动记录其原文或完整验证错误数据。
 
-现已提供 psycopg 连接与事务作用域：`app.database.connection()` 用于独立读取，`transaction()` 用于原子写入；正常退出提交，异常回滚，退出关闭连接。配置仅经 Settings/get_settings() 读取，非空的 libpq PG* 连接/会话环境覆盖会在建连前被拒绝，请清除这类变量并使用 DB_* 配置。模块导入不连接、不建隧道、不迁移；现有公开接口仍不访问数据库，真实后台业务尚未实现。开发环境建连前需填写密码；test 模式只允许专用本地 personal_web_test_* 目标，不能使用默认开发库。
+现已提供 psycopg 连接与事务作用域：`app.database.connection()` 用于独立读取，`transaction()` 用于原子写入；正常退出提交，异常回滚，退出关闭连接。配置仅经 Settings/get_settings() 读取，非空的 libpq PG* 连接/会话环境覆盖会在建连前被拒绝，请清除这类变量并使用 DB_* 配置。模块导入不连接、不建隧道、不迁移；现有公开接口仍不访问数据库；管理会话与鉴权使用数据库。开发环境建连前需填写密码；test 模式只允许专用本地 personal_web_test_* 目标，不能使用默认开发库。
 
 ## 开发库迁移
 
@@ -80,6 +80,24 @@ psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_E
 
 验证入口自动回滚测试记录，不能单独运行其中的断言片段；它不是日常清库命令。SQL 迁移不自动创建真实管理员、个人资料或工具种子数据，也不接入应用数据库连接。`updated_at` 由后续后端写入时更新；详情块、截图交换位置的事务须先将对应唯一约束设为 DEFERRED，提交前会检查最终顺序唯一。正式接口仍须保证已发布内容每次保存的完整性、图文事务一致、图片鉴权及跨日访客标识稳定；行为边界见[后台计划](docs/admin-management-plan.md)。此入口不用于生产库。
 
+## 开发环境管理员初始化
+
+先配置开发库并保持 `bash scripts/dev.sh` 运行，再在另一个交互终端执行。首次使用数据库时先运行上方迁移；已有迁移重复运行不会覆盖数据。
+
+```sh
+cd backend
+uv run --locked python -m app.migrate
+uv run --locked python -m app.admin_init
+```
+
+按提示输入账号（1—64字符）及两次密码（12—128字符）。密码输入不回显，不放在命令参数、聊天或环境变量中。初始化只创建一个账号，已有账号时拒绝覆盖；无默认账号密码，无密码重置入口。不要对已有账号反复初始化。
+
+访问前端 `/admin` 登录；本轮工作目录预览使用 http://127.0.0.1:5182/admin 。会话默认8小时，`ADMIN_SESSION_HOURS` 可设1—168。退出失败时页面保留身份并提示重试，服务端撤销成功后才回到登录页。浏览器只使用 HttpOnly、SameSite=Strict Cookie，CSRF值只存内存；真实开发库账号初始化与本地隔离测试是两项不同验收。
+
+`ADMIN_ALLOWED_ORIGINS` 使用精确来源的 JSON 数组，例如 `ADMIN_ALLOWED_ORIGINS='["http://127.0.0.1:5182"]'`。开发默认允许 localhost/127.0.0.1 的5180、5182端口；更换前端端口时须显式配置并重启后端。不开放跨域访问。
+
+生产默认不开放管理接口：必须配置可信 HTTPS 来源，且应用实际识别为 HTTPS。反向代理和可信代理配置在部署阶段验证，不能信任任意客户端转发头。阶段 B 的初始化命令拒绝 production；生产首次账号初始化、HTTPS、真实反向代理和发布验收仍待部署阶段处理，不能直接照用开发初始化步骤。
+
 ## 现有功能与修改入口
 
 - 个人信息：`backend/app/main.py`；页面与项目内容：`frontend/src/App.vue`；样式：`frontend/src/style.css`。公开作品仅旅行助手，不包含个人网站自身；个人信息加载失败仍可浏览项目并重试。
@@ -87,7 +105,7 @@ psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_E
 - 小工具：`ToolGrid.vue` 目前仅九个占位图标；`DiceGame.vue` 是独立悬浮骰子，点数由 `POST /api/dice/roll` 生成，不保存数据。支持减少动态偏好、超时重试和 WebGL 不可用时的简化显示；动画与点数逻辑在 `frontend/src/dice/`。
 - 健康与个人信息接口分别为 `GET /api/health`、`GET /api/profile`。后端接口定义和字段以代码为准。
 
-- 后台页面准备：开发环境访问 `/admin` 可进入本地演示，生产构建只显示待接入说明。演示不输入真实密码、不保存会话、不读写业务数据；刷新或退出即清除。
+- 后台：访问 `/admin`，使用真实管理员账号登录。刷新恢复服务端会话，退出撤销会话；四个业务模块暂为待接入说明。开发和生产构建使用同一真实接口，生产管理接口须另行落实 HTTPS 配置。
 
 ## 检查与预览
 
