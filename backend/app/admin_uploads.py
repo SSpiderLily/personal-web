@@ -47,7 +47,10 @@ class CompleteMultipartParser(MultiPartParser):
         except BaseException:
             # Includes an unfinished part that has not entered FormData yet.
             for file in self._files_to_close_on_error:
-                file.close()
+                try:
+                    file.close()
+                except OSError:
+                    pass  # Continue cleanup; preserve the original parse/storage error.
             raise
 
 
@@ -71,10 +74,14 @@ def configured_path(settings):
     if settings.upload_dir is None:
         raise unavailable()
     path = Path(settings.upload_dir)
+    if not path.is_absolute() or '..' in path.parts:
+        raise unavailable()
+    # Purely lexical: collapse POSIX's special // anchor without following any
+    # upload symlinks. Storage still opens every component with O_NOFOLLOW.
+    path = Path('/', *path.parts[1:])
     # Runtime only: a storage misconfiguration must not disable public APIs.
     release = Path(__file__).resolve().parents[2]
-    if (not path.is_absolute() or '..' in path.parts
-            or (settings.app_env == 'production' and path.is_relative_to(release))):
+    if settings.app_env == 'production' and path.is_relative_to(release):
         raise unavailable()
     return path
 
@@ -88,8 +95,9 @@ def storage_directory(settings, *, create=False):
     File operations stay relative to the retained descriptor, avoiding path races.
     """
     path = configured_path(settings)
-    descriptor = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    descriptor = None
     try:
+        descriptor = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
         for part in path.parts[1:]:
             try:
                 child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
@@ -110,7 +118,11 @@ def storage_directory(settings, *, create=False):
     except OSError:
         raise unavailable() from None
     finally:
-        os.close(descriptor)
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                raise unavailable() from None
 
 
 def complete_png(data):
@@ -217,6 +229,8 @@ async def upload(request: Request, current: auth.AdminSession = Depends(auth.req
     # Parsing starts only after both auth and the entire request size bound.
     try:
         form = await CompleteMultipartParser(request.headers, stream(), max_files=1, max_fields=0).parse()
+    except OSError:
+        raise unavailable() from None
     except (MultiPartException, ValueError, UnicodeError):
         raise auth.invalid_request() from None
     try:
@@ -228,9 +242,22 @@ async def upload(request: Request, current: auth.AdminSession = Depends(auth.req
         if not name or len(name) > 1024 or '\x00' in name:
             raise auth.invalid_request()
         data = await file.read(FILE_LIMIT + 1)
-        return await run_in_threadpool(save_image, settings, data, name, file.content_type)
-    finally:
+        if len(data) > FILE_LIMIT:
+            raise too_large()
+    except BaseException as error:
+        try:
+            await form.close()
+        except OSError:
+            pass  # Cleanup must not replace a size/validation error or cancellation.
+        if isinstance(error, OSError):
+            raise unavailable() from None
+        raise
+    try:
         await form.close()
+    except OSError:
+        raise unavailable() from None
+    # Release temporary storage before committing any final file/metadata.
+    return await run_in_threadpool(save_image, settings, data, name, file.content_type)
 
 
 def load_image(settings, identifier):

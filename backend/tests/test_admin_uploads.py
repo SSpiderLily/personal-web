@@ -198,3 +198,147 @@ class UploadTests(unittest.TestCase):
         for data in (value[:-1], value[:-2], value[:-4], value[:-1] + bytes([value[-1] ^ 1])):
             self.error(self.post(data), 400, 'invalid_image')
         self.assertFalse(self.root.exists())
+
+    def test_double_leading_slash_cannot_bypass_production_release_guard(self):
+        release = Path(self.uploads.__file__).resolve().parents[2]
+        settings = self.settings.model_copy(update={
+            'app_env': 'production', 'upload_dir': '//' + str(release).lstrip('/') + '/uploads'})
+        with self.assertRaises(auth.AdminError) as caught:
+            self.uploads.configured_path(settings)
+        self.assertEqual((caught.exception.status, caught.exception.code), (503, 'upload_unavailable'))
+        self.assertFalse((release / 'uploads').exists())
+
+    def test_multipart_rollover_disk_full_is_safe_and_closes_spooled_file(self):
+        import errno
+        import tempfile
+        from starlette import formparsers
+        real_spool = tempfile.SpooledTemporaryFile
+        spools = []
+        def track_spool(*args, **kwargs):
+            file = real_spool(*args, **kwargs)
+            spools.append(file)
+            return file
+        with patch.object(formparsers, 'SpooledTemporaryFile', side_effect=track_spool), \
+             patch.object(tempfile, 'TemporaryFile', side_effect=OSError(errno.ENOSPC, '/private/secret-path disk full')), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture() + b'x' * 1048576, 'image/png')})
+        self.error(response, 503, 'upload_unavailable')
+        self.assertNotIn('secret-path', response.text)
+        self.assertTrue(spools)
+        self.assertTrue(all(file.closed for file in spools))
+        self.assertFalse(self.root.exists())
+
+    def test_multipart_tempfile_creation_failure_is_safe(self):
+        from starlette import formparsers
+        with patch.object(formparsers, 'SpooledTemporaryFile', side_effect=OSError('private temp directory unavailable')), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture(), 'image/png')})
+        self.error(response, 503, 'upload_unavailable')
+        self.assertNotIn('private', response.text)
+        self.assertFalse(self.root.exists())
+
+    def test_tempfile_read_failure_is_safe_and_closes_spooled_file(self):
+        import tempfile
+        from starlette import formparsers
+        from starlette.datastructures import UploadFile
+        real_spool = tempfile.SpooledTemporaryFile
+        spools = []
+        def track_spool(*args, **kwargs):
+            file = real_spool(*args, **kwargs)
+            spools.append(file)
+            return file
+        with patch.object(formparsers, 'SpooledTemporaryFile', side_effect=track_spool), \
+             patch.object(UploadFile, 'read', side_effect=OSError('private read fault')), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture(), 'image/png')})
+        self.error(response, 503, 'upload_unavailable')
+        self.assertNotIn('private', response.text)
+        self.assertTrue(spools)
+        self.assertTrue(all(file.closed for file in spools))
+        self.assertFalse(self.root.exists())
+
+    def test_tempfile_close_failure_is_safe(self):
+        from starlette.datastructures import FormData
+        close = FormData.close
+        async def faulty_close(form):
+            await close(form)
+            raise OSError('private close fault')
+        with patch.object(FormData, 'close', faulty_close), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture(), 'image/png')})
+        self.error(response, 503, 'upload_unavailable')
+        self.assertNotIn('private', response.text)
+        self.assertFalse(self.root.exists())
+
+    def test_tempfile_cleanup_failure_preserves_file_size_error(self):
+        from starlette.datastructures import FormData
+        close = FormData.close
+        async def faulty_close(form):
+            await close(form)
+            raise OSError('private cleanup fault')
+        with patch.object(FormData, 'close', faulty_close), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture() + b'x' * 10485760, 'image/png')})
+        self.error(response, 413, 'file_too_large')
+        self.assertFalse(self.root.exists())
+
+    def test_tempfile_outage_does_not_mask_auth_or_body_size_errors(self):
+        from starlette import formparsers
+        with patch.object(formparsers, 'SpooledTemporaryFile', side_effect=OSError('private temp fault')):
+            with patch.object(auth, 'current_session', return_value=None):
+                self.error(self.post(), 401, 'unauthenticated')
+            response = self.client.post('/api/admin/files', headers=HEADERS | {
+                'Content-Type': 'multipart/form-data; boundary=x'}, content=b'x' * (10485760 + 65537))
+            self.error(response, 413, 'file_too_large')
+        self.assertFalse(self.root.exists())
+
+    def test_initial_storage_directory_open_failure_is_safe(self):
+        import errno
+        from app import admin_uploads
+        real_open = admin_uploads.os.open
+        def faulty_open(path, *args, **kwargs):
+            if path == '/':
+                raise OSError(errno.EMFILE, 'private descriptor exhaustion')
+            return real_open(path, *args, **kwargs)
+        with patch.object(admin_uploads.os, 'open', side_effect=faulty_open), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            response = client.post('/api/admin/files', headers=HEADERS,
+                                   files={'file': ('a.png', picture(), 'image/png')})
+        self.error(response, 503, 'upload_unavailable')
+        self.assertNotIn('private', response.text)
+        self.assertFalse(self.root.exists())
+
+    def test_double_leading_slash_outside_release_keeps_nofollow_storage_available(self):
+        settings = self.settings.model_copy(update={
+            'app_env': 'production', 'upload_dir': '/' + str(self.root)})
+        with self.uploads.storage_directory(settings, create=True) as descriptor:
+            import os
+            self.assertEqual(os.fstat(descriptor).st_ino, self.root.stat().st_ino)
+        self.assertEqual(self.root.stat().st_mode & 0o777, 0o700)
+
+    def test_failed_component_open_closes_owned_root_descriptor(self):
+        import errno
+        import os
+        real_open = os.open
+        root_fds = []
+        def faulty_open(path, *args, **kwargs):
+            if path == '/':
+                descriptor = real_open(path, *args, **kwargs)
+                root_fds.append(descriptor)
+                return descriptor
+            if kwargs.get('dir_fd') in root_fds:
+                raise OSError(errno.EACCES, 'private component permission fault')
+            return real_open(path, *args, **kwargs)
+        with patch.object(os, 'open', side_effect=faulty_open):
+            self.error(self.post(), 503, 'upload_unavailable')
+        self.assertTrue(root_fds)
+        for descriptor in root_fds:
+            with self.assertRaises(OSError) as caught:
+                os.fstat(descriptor)
+            self.assertEqual(caught.exception.errno, errno.EBADF)
+        self.assertFalse(self.root.exists())

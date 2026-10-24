@@ -149,3 +149,47 @@ class UploadIntegrationTests(unittest.TestCase):
         path.chmod(0o600)
         os.link(path, self.root.parent / 'hardlink')
         self.assertEqual(self.client.get(original['url']).status_code, 503)
+
+    def test_storage_faults_leave_no_final_files_or_metadata(self):
+        import errno
+        import tempfile
+        from starlette import formparsers
+        from starlette.datastructures import UploadFile
+        real_open = self.uploads.os.open
+        def faulty_open(path, *args, **kwargs):
+            if path == '/':
+                raise OSError(errno.EMFILE, 'private root descriptor fault')
+            return real_open(path, *args, **kwargs)
+        faults = [patch.object(tempfile, 'TemporaryFile', side_effect=OSError(errno.ENOSPC, 'private temp fault')),
+                  patch.object(formparsers, 'SpooledTemporaryFile', side_effect=OSError(errno.EACCES, 'private temp creation fault')),
+                  patch.object(UploadFile, 'read', side_effect=OSError('private temp read fault')),
+                  patch.object(self.uploads.os, 'open', side_effect=faulty_open)]
+        with TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            client.cookies.set(auth.COOKIE, self.client.cookies.get(auth.COOKIE))
+            for fault in faults:
+                with fault:
+                    response = client.post('/api/admin/files', headers=self.headers,
+                        files={'file': ('a.png', picture() + b'x' * 1048576, 'image/png')})
+                self.assertEqual(response.status_code, 503, response.text)
+                self.assertEqual(response.json()['error']['code'], 'upload_unavailable')
+                self.assertNotIn('private', response.text)
+                self.assertFalse(self.root.exists())
+                with database.connection() as conn:
+                    self.assertEqual(conn.execute('SELECT count(*) FROM uploaded_files').fetchone(), (0,))
+
+    def test_initial_directory_open_fault_on_read_is_safe(self):
+        import errno
+        original = self.post().json()
+        real_open = self.uploads.os.open
+        def faulty_open(path, *args, **kwargs):
+            if path == '/':
+                raise OSError(errno.EMFILE, 'private read descriptor fault')
+            return real_open(path, *args, **kwargs)
+        with patch.object(self.uploads.os, 'open', side_effect=faulty_open), \
+             TestClient(self.app, base_url=ORIGIN, raise_server_exceptions=False) as client:
+            client.cookies.set(auth.COOKIE, self.client.cookies.get(auth.COOKIE))
+            response = client.get(original['url'])
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(response.json()['error']['code'], 'upload_unavailable')
+        self.assertNotIn('private', response.text)
+        self.assertEqual(self.client.get(original['url']).content, picture())
