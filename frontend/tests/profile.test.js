@@ -126,3 +126,40 @@ test('ProfilePanel existing avatar has controlled preview and uploaded avatar re
     assert.equal(page.nodes().filter(n=>n.type==='img').length,0)
   }finally{page.unmount()}
 })
+
+test('real backend accepted profile URLs survive PublicProfile filtering', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { fileURLToPath } = await import('node:url')
+  const backend = new URL('../../backend/', import.meta.url)
+  const validHttp = ['https://example.com/100%25', 'https://example.com/%F0%9F%98%80', 'https://example.com/路径/😀?q=中文', 'http://localhost:5173/', 'http://127.0.0.1:5173/', 'https://[::1]/', 'https://xn--fsqu00a.xn--0zwm56d/路径']
+  const invalidHttp = ['https://example.com/100%', 'https://example.com/%FF', 'https://%', 'https://example.com/%E0%A4', 'https://example.com/%ED%A0%80', 'https://bad_host.example/', 'https://example.123/', 'https://127.1/', 'https://example.com:bad/', 'https://example.com/\u00a0', 'https://example.com/\ufeff', '', null]
+  const contacts = ['mailto:owner@example.com', 'tel:+86-123456789']
+  const cases = ['contacts', 'social_links'].flatMap(field => [
+    ...validHttp.map(url => ({ field, url, valid: true })),
+    ...invalidHttp.map(url => ({ field, url, valid: false })),
+    ...contacts.map(url => ({ field, url, valid: field === 'contacts' })),
+  ])
+  const script = `import json,sys
+from app.profile import validate_profile
+from app.admin_auth import AdminError
+base=dict(name='',title='',introduction='',skills=[],avatar_file_id=None,contacts=[],social_links=[])
+result=[]
+for case in json.load(sys.stdin):
+    try:
+        profile=validate_profile(base | {case['field']:[dict(label='链接',url=case['url'])]})
+        result.append(case | dict(accepted=True,profile=profile))
+    except AdminError:
+        result.append(case | dict(accepted=False))
+json.dump(result,sys.stdout)`
+  const results = JSON.parse(execFileSync(fileURLToPath(new URL('.venv/bin/python', backend)), ['-c', script], { cwd: fileURLToPath(backend), input: JSON.stringify(cases), encoding: 'utf8' }))
+  for (const result of results) {
+    assert.equal(result.accepted, result.valid, `${result.field}: ${result.url}`)
+    if (!result.accepted) continue
+    const page = mount('../src/components/PublicProfile.vue', { profile: result.profile })
+    try {
+      const links = page.nodes().filter(node => node.type === 'a')
+      assert.equal(links.length, 1, result.url)
+      assert.equal(links[0].props.href, result.url)
+    } finally { page.unmount() }
+  }
+})

@@ -44,3 +44,17 @@ class ProfileValidationTests(unittest.TestCase):
         self.assertEqual(self.profile.validate_profile(payload() | {'avatar_file_id':value})['avatar_file_id'], value)
         for value in ['', 1, True, 'not-a-uuid']:
             with self.assertRaises(auth.AdminError): self.profile.validate_profile(payload() | {'avatar_file_id':value})
+
+    def test_http_links_reject_malformed_browser_urls_before_saving(self):
+        for field in ('contacts', 'social_links'):
+            for url in ('https://example.com/100%', 'https://example.com/%FF', 'https://%',
+                        'https://example.com/%E0%A4', 'https://example.com/%ED%A0%80',
+                        'https://bad_host.example/', 'https://example.123/', 'https://127.1/',
+                        'https://example.com:bad/', 'https://example.com/\u00a0', 'https://example.com/\ufeff', '', None):
+                with self.subTest(field=field, url=url), self.assertRaises(auth.AdminError):
+                    self.profile.validate_profile(payload() | {field: [{'label': '链接', 'url': url}]})
+            for url in ('https://example.com/100%25', 'https://example.com/%F0%9F%98%80',
+                        'https://example.com/路径/😀?q=中文', 'http://localhost:5173/',
+                        'http://127.0.0.1:5173/', 'https://[::1]/', 'https://xn--fsqu00a.xn--0zwm56d/路径'):
+                value = payload() | {field: [{'label': '链接', 'url': url}]}
+                self.assertEqual(self.profile.validate_profile(value), value)

@@ -3,7 +3,7 @@ import re
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 from psycopg.types.json import Jsonb
-from app import admin_auth as auth
+from app import admin_auth as auth, projects
 from app.database import connection, transaction
 from app.settings import Settings
 
@@ -23,14 +23,14 @@ def _text(value, maximum, minimum=0):
 def _url(value, contact):
     value = _text(value, 2048, 1)
     decoded = unquote(value)
-    if any(ord(c) <= 32 or ord(c) == 127 or c == '\\' for c in value + decoded):
+    if any(c.isspace() or c == '\ufeff' for c in value) or any(ord(c) <= 32 or ord(c) == 127 or c == '\\' for c in value + decoded):
         raise auth.invalid_request()
     try:
         parsed = urlsplit(value)
         if parsed.scheme.lower() in ('http', 'https'):
-            if not parsed.hostname or parsed.username is not None or parsed.password is not None:
-                raise ValueError
-            parsed.port
+            # Reuse the browser-compatible HTTP policy; _text above still
+            # enforces profile links being required strings, never null.
+            return projects._url(value)
         elif contact and parsed.scheme.lower() == 'mailto':
             if not re.fullmatch(r'mailto:[A-Za-z0-9.!#$&\'*+/=_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?', value, re.I):
                 raise ValueError
