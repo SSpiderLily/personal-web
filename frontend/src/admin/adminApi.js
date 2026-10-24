@@ -63,6 +63,10 @@ export function createAdminApi(fetchImpl = (...args) => globalThis.fetch(...args
     try { return parseToolSettings(value) } catch { throw new AdminApiError('unexpected_response') }
   }
   return {
+    statistics: async days => {
+      if (days !== 7 && days !== 30) throw new AdminApiError('invalid_request')
+      return request('statistics?days=' + days)
+    },
     projects: () => request('projects'),
     project: id => request('projects/' + id),
     createProject: (value, csrf) => request('projects', {method:'POST', body:value, csrf}),

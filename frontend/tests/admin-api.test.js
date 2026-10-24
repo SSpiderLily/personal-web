@@ -86,3 +86,12 @@ test('content methods use one protected request adapter and fixed routes', async
  for (const call of calls.filter(x=>x.options.method!=='GET')) {assert.equal(call.options.headers['X-CSRF-Token'],'csrf');assert.equal(call.options.headers['X-Admin-Request'],'1')}
  assert.deepEqual(JSON.parse(calls[6].options.body),{ids:[4]})
 })
+
+test('statistics reuses protected GET adapter and accepts only fixed ranges',async()=>{
+ const calls=[];const api=createAdminApi(async(url,options)=>{calls.push({url,options});return response({days:7})})
+ await api.statistics(7);await api.statistics(30)
+ assert.deepEqual(calls.map(x=>x.url),['/api/admin/statistics?days=7','/api/admin/statistics?days=30'])
+ assert.equal(calls[0].options.credentials,'same-origin');assert.equal(calls[0].options.method,'GET');assert.equal(calls[0].options.body,undefined)
+ for(const days of [0,7.0+0.1,'7',true,undefined])await assert.rejects(api.statistics(days))
+ assert.equal(calls.length,2)
+})

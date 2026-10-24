@@ -4,6 +4,7 @@ import { createAdminApi, AdminApiError } from './adminApi.js'
 import ToolsPanel from './ToolsPanel.vue'
 import ProjectsPanel from './ProjectsPanel.vue'
 import ProfilePanel from './ProfilePanel.vue'
+import StatisticsPanel from './StatisticsPanel.vue'
 
 const props = defineProps({ api: { type: Object, default: () => createAdminApi() } })
 const phase = ref('checking')
@@ -29,6 +30,7 @@ const projectModuleApi = {
   reorder: ids => props.api.reorderProjects(ids, session.value?.csrf_token),
   upload: file => props.api.uploadFile(file, session.value?.csrf_token),
 }
+const statisticsModuleApi = { load: days => props.api.statistics(days) }
 const profileModuleApi = {
   load: () => props.api.profile(), save: value => props.api.saveProfile(value, session.value?.csrf_token),
   upload: file => props.api.uploadFile(file, session.value?.csrf_token),
@@ -36,7 +38,7 @@ const profileModuleApi = {
 function moduleUnauthenticated() { failure(new AdminApiError('unauthenticated', 401)) }
 const modules = [
   { id: 'projects', label: '项目管理', index: '01', description: '维护项目内容、图文详情和展示顺序。', scope: '项目列表、草稿、预览、发布与下架', dependency: '等待项目管理和图片上传接入。' },
-  { id: 'statistics', label: '访问统计', index: '02', description: '了解网站和项目的访问人数。', scope: '近 7 天、近 30 天的网站人数与项目浏览人数', dependency: '等待匿名访问记录和去重查询接口接入。' },
+  { id: 'statistics', label: '访问统计', index: '02', description: '了解网站和项目的访问人数。', scope: '近 7 天、近 30 天的网站人数与项目浏览人数', dependency: '近7/30天按匿名浏览器独立去重，管理员与预览不计入。' },
   { id: 'content', label: '网站内容', index: '03', description: '让个人介绍与联系方式保持更新。', scope: '姓名、头像、个人简介、联系方式和社交账号', dependency: '等待个人资料接口和图片上传接入。' },
   { id: 'tools', label: '小工具管理', index: '04', description: '安排九宫格工具与独立骰子的展示。', scope: '九宫格展示、排序与独立骰子开关', dependency: '等待工具设置接口接入。' },
 ]
@@ -190,7 +192,7 @@ onBeforeUnmount(() => {
         </div>
       </aside>
       <main class="admin-content" :aria-busy="busy">
-        <div class="admin-demo-banner"><strong>后台已连接</strong><span>项目、网站内容与小工具使用真实接口。切换模块会保留尚未保存的编辑。</span></div>
+        <div class="admin-demo-banner"><strong>后台已连接</strong><span>项目、统计、网站内容与小工具使用真实接口。切换模块会保留尚未保存的编辑。</span></div>
         <div v-if="error" class="admin-error-panel" role="alert">
           <p>{{ error }}</p>
           <button type="button" :disabled="busy" @click="restoreSession">重试</button>
@@ -202,14 +204,7 @@ onBeforeUnmount(() => {
           <ProjectsPanel v-if="visited.has('projects')" v-show="selected === 'projects'" :api="projectModuleApi" @unauthenticated="moduleUnauthenticated" />
           <ProfilePanel v-if="visited.has('content')" v-show="selected === 'content'" :api="profileModuleApi" @unauthenticated="moduleUnauthenticated" />
           <ToolsPanel v-if="visited.has('tools')" v-show="selected === 'tools'" :api="toolModuleApi" @unauthenticated="moduleUnauthenticated" />
-          <div v-if="selected === 'statistics'" class="admin-pending">
-            <div class="admin-pending-mark" aria-hidden="true">＋</div>
-            <p class="admin-badge">尚未接入</p>
-            <h2>这里将用于{{ current.label }}</h2>
-            <p>{{ current.scope }}</p>
-            <p class="admin-muted">{{ current.dependency }}</p>
-          </div>
-          <p v-if="selected === 'statistics'" class="admin-module-note">统计基础接口已就绪，统计界面与真实访问事件将在下一阶段接入。</p>
+          <StatisticsPanel v-if="visited.has('statistics')" v-show="selected === 'statistics'" :api="statisticsModuleApi" @unauthenticated="moduleUnauthenticated" />
         </section>
         <p v-else-if="!error" class="admin-muted" role="status">正在读取后台入口…</p>
       </main>

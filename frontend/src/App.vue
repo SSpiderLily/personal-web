@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { createVisitCollector } from './statistics/visitCollector.js'
 import ProjectContent from './components/ProjectContent.vue'
 import PublicProfile from './components/PublicProfile.vue'
 import { fetchProjects, fetchProject } from './projects/publicProjects.js'
@@ -20,6 +21,11 @@ const selectedProject = ref(null)
 const selectedId = ref(null)
 let detailRequest = 0
 let alive = true
+let visitCollector = null
+function recordProjectVisit(event) {
+  const id = event?.detail?.project_id
+  if (visitCollector && Number.isSafeInteger(id) && id > 0) void visitCollector.project(id)
+}
 async function loadProjects() {
   projectsLoading.value = true
   projectsError.value = ''
@@ -57,7 +63,13 @@ function restoreScroll() {
 function closeOnBackdrop(event) {
   if (event.target === detailsDialog.value) detailsDialog.value.close()
 }
-onBeforeUnmount(() => { alive = false; restoreScroll() })
+onBeforeUnmount(() => {
+  window.removeEventListener('project-opened', recordProjectVisit)
+  visitCollector?.dispose()
+  visitCollector = null
+  alive = false
+  restoreScroll()
+})
 async function loadProfile() {
   loading.value = true
   error.value = ''
@@ -73,7 +85,15 @@ async function loadProfile() {
     loading.value = false
   }
 }
-onMounted(() => { loadProfile(); loadProjects() })
+onMounted(() => {
+  if (window.location.pathname === '/') {
+    visitCollector = createVisitCollector()
+    window.addEventListener('project-opened', recordProjectVisit)
+    void visitCollector.website()
+  }
+  loadProfile()
+  loadProjects()
+})
 </script>
 
 <template>

@@ -27,5 +27,5 @@ class StageCRouteTests(unittest.TestCase):
         try:
             with TestClient(app) as client:
                 self.assertEqual({item['id']:item['status'] for item in client.get('/api/admin/overview').json()['modules']},
-                                 {'projects':'ready','statistics':'pending','content':'ready','tools':'ready'})
+                                 {'projects':'ready','statistics':'ready','content':'ready','tools':'ready'})
         finally:app.dependency_overrides.clear()

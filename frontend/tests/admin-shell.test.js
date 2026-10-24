@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
 import { AdminApiError } from '../src/admin/adminApi.js'
+import { parseStatistics } from '../src/statistics/statisticsModel.js'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 
 function mountAdmin(api, { render = false } = {}) {
@@ -13,7 +14,7 @@ function mountAdmin(api, { render = false } = {}) {
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace(/^import.*from.*adminApi.*$/gm, '')
-    .replace(/^import (ToolsPanel|ProjectsPanel|ProfilePanel).*$/gm, '')
+    .replace(/^import (ToolsPanel|ProjectsPanel|ProfilePanel|StatisticsPanel).*$/gm, '')
     .replace('export default', 'return')
   const childDescriptor = parse(readFileSync(new URL('../src/admin/ToolsPanel.vue', import.meta.url), 'utf8')).descriptor
   const childCode = compileScript(childDescriptor, { id: 'admin-tools-test', inlineTemplate: true }).content
@@ -23,7 +24,12 @@ function mountAdmin(api, { render = false } = {}) {
   const ToolsPanel = new Function('Vue', childCode)(Vue)
   const ProjectsPanel = Vue.defineComponent({setup(){ const value=Vue.ref('');return()=>Vue.h('input',{value:value.value,onInput:e=>value.value=e.target.value},'module-draft') }})
   const ProfilePanel = Vue.defineComponent({setup(){return()=>Vue.h('p','profile module')}})
-  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', 'ToolsPanel', 'ProjectsPanel', 'ProfilePanel', compiled)(Vue, () => api, AdminApiError, ToolsPanel, ProjectsPanel, ProfilePanel)
+  const statsDescriptor = parse(readFileSync(new URL('../src/admin/StatisticsPanel.vue', import.meta.url), 'utf8')).descriptor
+  const statsCode = compileScript(statsDescriptor, {id:'admin-statistics-test',inlineTemplate:true}).content
+    .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) => 'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
+    .replace(/^import.*statisticsModel.*$/gm, '').replace('export default','return')
+  const StatisticsPanel = new Function('Vue','parseStatistics',statsCode)(Vue,parseStatistics)
+  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', 'ToolsPanel', 'ProjectsPanel', 'ProfilePanel', 'StatisticsPanel', compiled)(Vue, () => api, AdminApiError, ToolsPanel, ProjectsPanel, ProfilePanel, StatisticsPanel)
   const template = compileTemplate({ source: descriptor.template.content, id: 'admin-shell-test', compilerOptions: { bindingMetadata: script.bindings } }).code
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
@@ -370,4 +376,27 @@ test('module switching and failed overview refresh preserve mounted content draf
     fail=true;await page.state.refreshOverview();await flush()
     assert.equal(page.find('input','module-draft').props.value,'未保存的内容')
   } finally {page.unmount()}
+})
+
+test('statistics adapter forwards fixed ranges and delegates lost authentication',async()=>{
+ const ranges=[];const page=mountAdmin(api({session:async()=>authenticated,statistics:async days=>{ranges.push(days);return {days}}}))
+ try{await flush();assert.deepEqual(await page.state.statisticsModuleApi.load(30),{days:30});assert.deepEqual(ranges,[30]);page.state.moduleUnauthenticated();assert.equal(page.state.phase,'anonymous')}finally{page.unmount()}
+})
+
+
+test('real statistics child retries failures, shows true zero, preserves sibling draft, and clears on401',async()=>{
+ let failure=503
+ const page=mountAdmin(api({session:async()=>authenticated,statistics:async days=>{
+  if(failure)throw new AdminApiError(failure===401?'unauthenticated':'admin_unavailable',failure)
+  return {days,timezone:'Asia/Shanghai',start_date:'2026-10-18',end_date:'2026-10-24',website_visitors:0,projects:[]}
+ }}),{render:true})
+ try{
+  await flush();page.find('input','module-draft').props.onInput({target:{value:'未保存'}})
+  await page.state.selectModule('statistics');await flush();assert.match(page.text(),/访问统计暂时不可用/)
+  assert.equal(page.find('input','module-draft').props.value,'未保存')
+  failure=0;await page.find('button','重试加载').props.onClick();await flush()
+  assert.ok(page.nodes().some(node=>node.props.class==='statistics-count'&&node.text==='0'))
+  failure=401;await page.find('button','刷新').props.onClick();await flush()
+  assert.equal(page.state.phase,'anonymous');assert.equal(page.find('input','module-draft'),undefined)
+ }finally{page.unmount()}
 })
