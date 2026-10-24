@@ -347,6 +347,51 @@ def create(args):
     return {'backup':str(backup / name)}
 
 
+def require_empty_restore_target(conn):
+    # pg_class alone misses standalone routines/types. All objects scoped to
+    # public have a namespace dependency, including operators, text search
+    # objects, domains and their constraints. A fresh public schema has none.
+    occupied = conn.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM pg_depend
+            WHERE refclassid = 'pg_namespace'::regclass
+              AND refobjid = 'public'::regnamespace
+        ) OR EXISTS (
+            SELECT 1 FROM pg_namespace
+            WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'public')
+              AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%'
+        ) OR EXISTS (
+            SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+              AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%'
+        ) OR EXISTS (
+            SELECT 1 FROM pg_extension
+            WHERE extname <> 'plpgsql' OR extnamespace <> 'pg_catalog'::regnamespace
+        ) OR EXISTS (
+            -- PostgreSQL reserves OIDs below FirstNormalObjectId (16384)
+            -- for bootstrap objects. User casts between pinned built-in types
+            -- can have no pg_depend rows, so inspect their catalog directly.
+            SELECT 1 FROM pg_cast WHERE oid >= 16384
+        ) OR EXISTS (SELECT 1 FROM pg_proc WHERE oid >= 16384)
+          OR EXISTS (SELECT 1 FROM pg_type WHERE oid >= 16384)
+          OR EXISTS (SELECT 1 FROM pg_class WHERE oid >= 16384)
+          OR EXISTS (SELECT 1 FROM pg_constraint WHERE oid >= 16384)
+          OR EXISTS (SELECT 1 FROM pg_default_acl)
+          OR EXISTS (SELECT 1 FROM pg_event_trigger)
+          OR EXISTS (SELECT 1 FROM pg_foreign_data_wrapper)
+          OR EXISTS (SELECT 1 FROM pg_foreign_server)
+          OR EXISTS (SELECT 1 FROM pg_largeobject_metadata)
+          OR EXISTS (SELECT 1 FROM pg_publication)
+          OR EXISTS (SELECT 1 FROM pg_subscription)
+          OR EXISTS (SELECT 1 FROM pg_transform)
+          OR EXISTS (
+              SELECT 1 FROM pg_language
+              WHERE lanname NOT IN ('internal', 'c', 'sql', 'plpgsql')
+          )
+    """).fetchone()[0]
+    require(not occupied, 'Restore requires an empty owned test database')
+
+
 def restore_test(args):
     require(args.execute, 'restore-test requires --execute')
     settings = target(restore=True)
@@ -360,10 +405,7 @@ def restore_test(args):
     started = time.monotonic()
     with database.connection(settings) as conn:
         identity(conn, settings)
-        # No application-owned or user-created objects in *any* non-system schema.
-        count = conn.execute("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND n.nspname NOT LIKE 'pg_temp%'").fetchone()[0]
-        schemas = conn.execute("SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public') AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%'").fetchall()
-        require(count == 0 and not schemas, 'Restore requires an empty owned test database')
+        require_empty_restore_target(conn)
         uploads.mkdir(mode=0o700)
         # Transactional database restore rolls back SQL failures. Subsequent validation
         # failures preserve test DB/files for diagnosis; never auto-drop DBs or roles.
