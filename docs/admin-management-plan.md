@@ -2,7 +2,7 @@
 
 目标：解决个人网站没有管理后台的问题；第一版只做后台框架和基本功能。
 
-状态（2026-10-24）：任务1—7已完成技术验证及相应用户验收，八项完整任务计7/8；阶段E两线已本地集成、独立审查、真实开发接线并获用户测试接受，本轮复核未发现阻塞遗漏。阶段F准备已整理，8B尚未实施；8A建议参数仍待落实，不视为生产事实。证据见[验证记录](validation-log.md)。本轮未fetch/push、未合并main、未访问或修改生产；上次已验证的生产版本为f01d1fe，不代表本轮重新确认线上版本。
+状态（2026-10-24）：任务1—7已完成技术验证及相应用户验收，八项完整任务计7/8；阶段E两线已本地集成、独立审查、真实开发接线并获用户测试接受，本轮复核未发现阻塞遗漏。阶段F已授权本地两线并行实施，8B技术工作进行中；8A建议参数仍待落实，不视为生产事实。证据见[验证记录](validation-log.md)。本轮未fetch/push、未合并main、未访问或修改生产；上次已验证的生产版本为f01d1fe，不代表本轮重新确认线上版本。
 
 ## 已确认需求
 
@@ -522,3 +522,20 @@
 - [ ] **F6 获授权后串行部署并验收。** 首先控制自动发布，避免合并先于服务器配套；确认实际配置和安装脚本已就绪。备份/迁移/初始化/切换分别记录结果；核对目标提交、schema、真实数据库、两个worker、图片、后台刷新、TLS证书与续期、旧演示入口。常规内容冒烟用管理员浏览器排除统计；计数专项优先在隔离环境，不在生产注入fixture或清空真实访问。只有验收通过才开放写入、启用后续发布并将任务8计为完成。
 
 代码回退保留兼容扩展schema；数据库和图片恢复是另一项有数据损失风险的操作，须保存现场并确认备份后写入损失，不能随代码失败自动覆盖。生产实际恢复、推送、PR/main合并及发布均不在本轮准备中执行。尚未确定的生产参数不阻塞本地工具准备，但阻塞对应生产步骤；不得使用占位域名或未经验证的备份目标上线。
+
+
+## 阶段 F 执行合同（2026-10-24）
+
+用户已授权固定建议接口/参数、建立两条线独立目录并并行执行，本节替代F准备中的“仅建分支/未实施”限制。集成目录`.worktrees/admin-phase-f`，两线目录`.worktrees/admin-f-release`、`.worktrees/admin-f-recovery`。本地工具、演练与提交授权不包含推送/main合并/真实生产初始化、迁移或恢复。现有E预览继续运行，不复制开发数据或密码到各线。8B不因本地实现计入完成，整体仍7/8。
+
+固定交接：
+
+- 生产目标固定`APP_ENV=production`、`DB_NAME=personal_web_prod`、`DB_USER=personal_web_prod`，同时校验真实连接身份；test路径仅允许现有隔离目标约束，不得通过改名连接云端。生产环境从权限受控的`/etc/personal-web/app.env`加载；忽略仓库.env，无启动隐式迁移。新命令默认仅只读预检，写入显式`--execute`。错误输出安全摘要，不回显密码/完整driver异常。
+- 发布互斥沿用`<deploy.root>/deploy.lock`；命令可独立获取该锁，集成调用通过`--lock-file PATH --lock-fd N`复用已持有的描述符并校验文件身份/锁有效性，不重复加锁。数据库迁移复用794675013001及版本/校验和prefix合同。001—003保持不可变，全批事务；不支持down或漂移修复。
+- 迁移入口`python -m app.production_migrate --expect-database personal_web_prod --expect-user personal_web_prod [--execute --lock-file PATH --lock-fd N]`。预检JSON固定`database,user,applied,pending`，后两项为版本名列表，应用后再次预检pending为空；首次无历史只读预检不创建表。首次管理员独立入口`python -m app.production_admin_init`加相同期望身份、显式执行和发布锁；必须TTY双次getpass，不接收密码参数/环境变量，不覆盖既有账号，校验HTTPS允许来源、schema就绪。原开发入口继续拒绝production。
+- 备份工具`scripts/data_backup.py`提供`create`、`verify`、`restore-test`子命令。create参数固定`--uploads-dir --backup-root --replica-root --revision --pg-bin --lock-file [--lock-fd] --execute --writers-stopped`，使用Settings中DB_*，revision完整40位小写SHA；create成功stdout仅JSON`{"backup":绝对备份组路径}`。verify只读，参数`--backup`；restore-test只接受本机专用空测试库及全新图片目录，绝不覆盖生产/开发。部署内create必须在全部worker和其他写入者停止后调用；`writers-stopped`是外层操作确认，不能替代外层停止检查。
+- 备份组固定`manifest.json`、`database.dump`、`uploads.tar`，manifest格式版本1，包含UTC时间、revision、数据库/账号、schema版本与校验和、每个文件SHA-256及图片数/逐文件校验和；不含密码、会话、访客明细或配置原文。组目录0700、文件0600，拒绝源路径符号链接/越界和非法归档成员；先完整校验再公布成功，失败保留旧有效组。原样复制并校验replica-root中的完整组。复制成功仅证明第二路径副本，异机隔离和加密挂载仍需真实环境单独核验。
+- 参数选择沿用8A建议：uploads为`/var/lib/personal-web/uploads`，backup为`/var/backups/personal-web`；运行用户取现有服务事实，不硬改账号。日备份7份、周备份4份为保留建议，第一版不自动删备份或新增服务器定时任务。恢复时间/恢复点仍待演练和用户接受。域名、证书和异机目录不虚构；缺少这些部署前提时工具须拒绝真实切换。
+- 集成方独占deploy/CI/ops/README/计划/验证记录和INDEX。维护标记覆盖个人网站所有写API（含匿名统计），保留旅行助手路径；单一外层失败边界覆盖备份、迁移及切换。只在健康、schema、业务只读就绪及持久目录验证成功后解除维护；失败恢复兼容旧代码，恢复失败继续维护，不自动恢复数据。隔离验证采用真实dump/restore及两worker演练，操作production仅提供审阅后的步骤。
+
+实施采用先失败测试再最小实现，独立依赖与临时数据，分别提交、审查后普通merge；共享文档由集成方串行更新。原项目backend/.env.example外部改动保留。原生worktree工具无目标仓库参数，而当前聊天环境目录不是本项目Git仓库，因此按用户指定既有项目`.worktrees`布局使用git创建，避免创建到错误仓库。
