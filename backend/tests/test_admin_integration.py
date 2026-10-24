@@ -156,6 +156,18 @@ class AdminIntegrationTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT username,password_hash FROM admin_accounts').fetchall(), original)
         self.assertTrue(PasswordHash.recommended().verify(PASSWORD, original[0][1]))
 
+    def test_bootstrap_cli_initializes_from_real_tty_without_echo(self):
+        with database.transaction() as conn:
+            conn.execute('DELETE FROM admin_accounts')
+        result = subprocess.run([sys.executable, 'tests/admin_tty_probe.py'], input=PASSWORD,
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with database.connection() as conn:
+            row = conn.execute('SELECT username,password_hash FROM admin_accounts').fetchone()
+        self.assertEqual(row[0], 'tty-owner')
+        self.assertTrue(PasswordHash.recommended().verify(PASSWORD, row[1]))
+        self.assertEqual(self.login(username='tty-owner').status_code, 200)
+
     def test_bootstrap_cli_rejects_piped_password_without_write(self):
         result = subprocess.run([sys.executable, '-m', 'app.admin_init'], input='owner\n' + PASSWORD + '\n' + PASSWORD + '\n', capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)

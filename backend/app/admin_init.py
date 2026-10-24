@@ -58,7 +58,7 @@ def main() -> int:
             raise AdminInitializationError('Interactive terminal required; piped input is not accepted.')
         # getpass normally falls back to echoing stdin when /dev/tty is absent.
         # Verify the terminal first, and turn any later fallback warning into failure.
-        with open('/dev/tty', 'r+') as terminal:
+        with open('/dev/tty', 'r') as terminal:
             if not terminal.isatty():
                 raise AdminInitializationError('Interactive terminal required.')
         print(f'Initialize one administrator: {settings.app_env}, {settings.db_name} at {settings.db_host}:{settings.db_port}')
