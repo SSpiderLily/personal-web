@@ -63,7 +63,10 @@ def main():
             print(f'Isolated PostgreSQL {version}; temporary cluster, Unix socket only.', flush=True)
             result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_database*.py', '-v', *sys.argv[1:]],
                                     cwd=backend, env=env)
-            return result.returncode
+            if result.returncode:
+                return result.returncode
+            return subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_admin*.py', '-v', *sys.argv[1:]],
+                                  cwd=backend, env=env).returncode
 
 
 if __name__ == '__main__':

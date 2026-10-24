@@ -4,9 +4,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.settings import get_settings
+from app.admin_routes import router as admin_router
 
 settings = get_settings()
 app = FastAPI(title="Personal Website API", version="0.1.0", debug=settings.debug)
+app.include_router(admin_router)
 
 class Project(BaseModel):
     name: str
