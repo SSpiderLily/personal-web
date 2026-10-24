@@ -215,6 +215,43 @@ class DataBackupTests(unittest.TestCase):
         self.assertNotEqual(self.cli(args, env=env).returncode, 0)
         self.assertNotEqual(self.cli(args, env=dict(env, APP_ENV='production')).returncode, 0)
 
+    def test_restore_rejects_function_only_target_before_creating_uploads(self):
+        group = self.create()
+        args, env = self.restore_args(group)
+        self.sql('CREATE FUNCTION public.preexisting_marker() RETURNS integer LANGUAGE SQL AS $$SELECT 42$$', env['DB_NAME'])
+        result = self.cli(args, env=env)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((self.root / 'restored').exists())
+        self.assertEqual(self.sql('SELECT public.preexisting_marker()', env['DB_NAME']).strip(), '42')
+        self.assertEqual(self.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public'", env['DB_NAME']).strip(), '0')
+
+    def test_restore_rejects_type_only_target_before_creating_uploads(self):
+        group = self.create()
+        args, env = self.restore_args(group)
+        self.sql("CREATE TYPE public.preexisting_marker AS ENUM ('existing')", env['DB_NAME'])
+        result = self.cli(args, env=env)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse((self.root / 'restored').exists())
+        self.assertEqual(self.sql("SELECT 'existing'::public.preexisting_marker", env['DB_NAME']).strip(), 'existing')
+        self.assertEqual(self.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public'", env['DB_NAME']).strip(), '0')
+
+    def test_restore_rejects_procedure_domain_and_namespace_free_cast(self):
+        group = self.create()
+        for statement in (
+            'CREATE PROCEDURE public.preexisting_marker() LANGUAGE SQL AS $$SELECT 42$$',
+            'CREATE DOMAIN public.preexisting_marker AS integer CHECK (VALUE > 0)',
+            'CREATE CAST (integer AS text) WITH INOUT AS ASSIGNMENT',
+            'ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC',
+        ):
+            with self.subTest(statement=statement):
+                args, env = self.restore_args(group)
+                args[args.index('--uploads-dir') + 1] = str(self.root / ('restored-' + uuid.uuid4().hex))
+                self.sql(statement, env['DB_NAME'])
+                result = self.cli(args, env=env)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertFalse(Path(args[args.index('--uploads-dir') + 1]).exists())
+                self.assertEqual(self.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public'", env['DB_NAME']).strip(), '0')
+
     def test_missing_image_metadata_and_failed_second_copy_preserve_old_group(self):
         group = self.create()
         (self.uploads / self.key).unlink()
