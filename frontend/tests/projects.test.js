@@ -130,3 +130,22 @@ test('in-flight uploads guard save, publication, ordering and selection until th
     assert.equal(page.state.uploading.value,0);assert.equal(page.state.draft.value.cover_file_id,image)
   }finally{page.unmount()}
 })
+
+test('backend accepted codepoint limits and safe encoded URLs roundtrip through parseProject',()=>{
+  const project={...value(),name:'😀'.repeat(100),summary:'😀'.repeat(2000),category:'😀'.repeat(100),cover_alt:'😀'.repeat(500),tech_stack:['😀'.repeat(100)],features:['😀'.repeat(500)],blocks:[{kind:'text',body:'😀'.repeat(10000)}]}
+  for(const demo_url of ['https://example.com/100%25','https://example.com/%F0%9F%98%80','https://example.com/😀','http://localhost:5173/','http://127.0.0.1:5173/','https://[::1]/']){
+    assert.deepEqual(Helpers.parseProject({...project,demo_url}).name,project.name)
+  }
+  assert.throws(()=>Helpers.parseProject({...project,name:'😀'.repeat(101)}))
+  for(const url of ['https://example.com/100%','https://example.com/%FF','https://%','https://example.com/%E0%A4','https://bad_host.example/','https://example.123/','https://127.1/','https://example.com/%ED%A0%80']) assert.equal(Helpers.projectLink(url),null,url)
+})
+
+test('real Python validation output roundtrips into frontend parsing for Unicode and URL corpus',async()=>{
+  const {execFileSync}=await import('node:child_process')
+  const backend=new URL('../../backend/',import.meta.url)
+  const python=new URL('.venv/bin/python',backend)
+  const script=`import json\nfrom app.projects import validate_project\nbase=dict(name='😀'*100,summary='😀'*2000,category='😀'*100,tech_stack=['😀'*100],features=['😀'*500],cover_file_id=None,cover_alt='😀'*500,demo_url=None,source_url=None,blocks=[dict(kind='text',body='😀'*10000)],screenshots=[])\nurls=['https://example.com/100%25','https://example.com/%F0%9F%98%80','https://example.com/😀','http://localhost:5173/','http://127.0.0.1:5173/','https://[::1]/']\njson.dump([validate_project(base | dict(demo_url=url)) for url in urls],__import__('sys').stdout)`
+  const {fileURLToPath}=await import('node:url')
+  const payloads=JSON.parse(execFileSync(fileURLToPath(python),['-c',script],{cwd:fileURLToPath(backend),encoding:'utf8',maxBuffer:4*1024*1024}))
+  for(const payload of payloads) assert.equal(Helpers.parseProject({...value(),...payload}).name,'😀'.repeat(100))
+})

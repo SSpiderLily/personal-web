@@ -1,5 +1,6 @@
 """Atomic project editing, publication and ordered public reads."""
 import re
+import ipaddress
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
@@ -43,15 +44,35 @@ def _url(value, *, demo=False):
     _text(value, 2048, 1)
     if demo and value == '/trip/':
         return value
-    if re.search(r'[\x00-\x20\x7f-\x9f\\]', value) or re.search(r'[\x00-\x20\x7f-\x9f\\]', unquote(value)):
-        raise auth.invalid_request()
     try:
+        if re.search(r'%(?![0-9a-fA-F]{2})', value):
+            raise ValueError
+        decoded = unquote(value, errors='strict')
+        if re.search(r'[\x00-\x20\x7f-\x9f\\]', value + decoded):
+            raise ValueError
+        matched = re.match(r'https?://([^/?#]+)', value, re.I)
+        if matched is None:
+            raise ValueError
+        authority = matched.group(1)
+        if not re.fullmatch(r'(?:\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::[0-9]*)?', authority):
+            raise ValueError
         parsed = urlsplit(value)
         if (parsed.scheme.lower() not in ('http', 'https') or not parsed.hostname
                 or parsed.username is not None or parsed.password is not None):
             raise ValueError
         parsed.port
-    except ValueError:
+        host = parsed.hostname
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            # A conservative DNS spelling avoids WHATWG's numeric-host coercions.
+            labels = host.removesuffix('.').split('.')
+            if (len(host) > 253 or not host.isascii() or labels[-1].isdigit()
+                    or labels[-1].lower().startswith('0x') or any(not re.fullmatch(
+                        r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label) for label in labels)):
+                raise ValueError
+            host.encode('ascii').decode('idna')
+    except (ValueError, UnicodeError):
         raise auth.invalid_request() from None
     return value
 

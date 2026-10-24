@@ -8,9 +8,20 @@ export function projectLink(value, env = import.meta.env || {}) {
     if (configured) return configured === '/trip/' ? '/trip/' : projectLink(configured, {})
     return env.DEV ? 'http://127.0.0.1:5173/' : '/trip/'
   }
-  if (typeof value !== 'string' || value.length > 2048 || /[\x00-\x20\x7f-\x9f\\]/.test(value)) return null
+  if (typeof value !== 'string' || [...value].length > 2048 || /[\x00-\x20\x7f-\x9f\\]/.test(value) || /[\ud800-\udfff]/u.test(value)) return null
   try {
     if (/[\x00-\x20\x7f-\x9f\\]/.test(decodeURIComponent(value))) return null
+    if (!/^https?:\/\//i.test(value) || /%(?![0-9a-f]{2})/i.test(value)) return null
+    const authority = value.match(/^https?:\/\/([^/?#]+)/i)?.[1]
+    if (!authority || !/^(?:\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::\d*)?$/i.test(authority)) return null
+    const rawHost = authority.startsWith('[') ? authority.slice(1, authority.indexOf(']')) : authority.split(':')[0]
+    if (!rawHost.includes(':')) {
+      const labels = rawHost.replace(/\.$/, '').split('.')
+      if (rawHost.length > 253 || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))) return null
+      if (/^\d+$/.test(labels.at(-1)) || /^0x/i.test(labels.at(-1))) {
+        if (labels.length !== 4 || labels.some(label => !/^(?:0|[1-9]\d{0,2})$/.test(label) || Number(label) > 255)) return null
+      }
+    }
     const url = new URL(value)
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? value : null
   } catch { return null }
@@ -25,8 +36,8 @@ export function editableProject(value) {
   return result
 }
 export function parseProject(value) {
-  const text = (value, max) => typeof value === 'string' && value.length <= max && !/[\u0000\ud800-\udfff]/u.test(value)
-  const strings = (value, max, length) => Array.isArray(value) && value.length <= max && value.every(item => text(item, length) && item.length > 0)
+  const text = (value, max) => typeof value === 'string' && [...value].length <= max && !/[\u0000\ud800-\udfff]/u.test(value)
+  const strings = (value, max, length) => Array.isArray(value) && [...value].length <= max && value.every(item => text(item, length) && item.length > 0)
   if (!value || !Number.isSafeInteger(value.id) || value.id < 1 || !['draft', 'published', 'archived'].includes(value.status) ||
       !Number.isInteger(value.sort_order) || value.sort_order < 0 || !text(value.name, 100) || !text(value.summary, 2000) ||
       !text(value.category, 100) || !text(value.cover_alt, 500) || !strings(value.tech_stack, 20, 100) || !strings(value.features, 30, 500) ||

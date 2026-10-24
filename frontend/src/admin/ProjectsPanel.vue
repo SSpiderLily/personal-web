@@ -159,24 +159,24 @@ onMounted(load)
       <form @submit.prevent="save">
         <fieldset :disabled="blocked">
           <legend>基本信息</legend>
-          <label>项目名称<input v-model="draft.name" maxlength="100"></label>
-          <label>项目简介<textarea v-model="draft.summary" maxlength="2000" rows="3"></textarea></label>
-          <label>分类<input v-model="draft.category" maxlength="100"></label>
+          <label>项目名称<input v-model="draft.name"></label>
+          <label>项目简介<textarea v-model="draft.summary" rows="3"></textarea></label>
+          <label>分类<input v-model="draft.category"></label>
           <label>技术栈（每行一项，最多20项）<textarea v-model="techText" rows="3"></textarea></label>
           <label>项目特点（每行一项，最多30项）<textarea v-model="featureText" rows="3"></textarea></label>
-          <label>在线体验链接<input :value="draft.demo_url || ''" maxlength="2048" placeholder="https://… 或 /trip/" @input="draft.demo_url = $event.target.value || null"></label>
-          <label>源码链接<input :value="draft.source_url || ''" maxlength="2048" placeholder="https://…" @input="draft.source_url = $event.target.value || null"></label>
+          <label>在线体验链接<input :value="draft.demo_url || ''" placeholder="https://… 或 /trip/" @input="draft.demo_url = $event.target.value || null"></label>
+          <label>源码链接<input :value="draft.source_url || ''" placeholder="https://…" @input="draft.source_url = $event.target.value || null"></label>
         </fieldset>
         <fieldset :disabled="blocked"><legend>封面</legend>
           <img v-if="draft.cover_file_id" class="cover-preview" :src="projectImageUrl(draft.cover_file_id, true)" :alt="draft.cover_alt || '封面预览'">
           <ImageUpload :api="uploadApi" @update:model-value="setCover" @unauthenticated="failure({ status: 401 })" />
-          <label>封面替代文字<input v-model="draft.cover_alt" maxlength="500"></label>
+          <label>封面替代文字<input v-model="draft.cover_alt"></label>
           <button v-if="draft.cover_file_id" type="button" @click="draft.cover_file_id = null">移除封面</button>
         </fieldset>
         <fieldset :disabled="blocked"><legend>图文详情（最多100块）</legend>
           <div v-for="(block, index) in draft.blocks" :key="index" class="content-item">
-            <label v-if="block.kind === 'text'">文本块 {{ index + 1 }}<textarea v-model="block.body" maxlength="10000" rows="5"></textarea></label>
-            <template v-else><img :src="projectImageUrl(block.file_id, true)" alt="详情图片预览"><label>图片说明<input v-model="block.caption" maxlength="500"></label>
+            <label v-if="block.kind === 'text'">文本块 {{ index + 1 }}<textarea v-model="block.body" rows="5"></textarea></label>
+            <template v-else><img :src="projectImageUrl(block.file_id, true)" alt="详情图片预览"><label>图片说明<input v-model="block.caption"></label>
               <ImageUpload :api="uploadApi" @update:model-value="block.file_id = $event.id" @unauthenticated="failure({ status: 401 })" />
             </template>
             <div class="item-actions"><button type="button" :disabled="index === 0" @click="moveItem(draft.blocks, index, -1)">上移</button><button type="button" :disabled="index === draft.blocks.length - 1" @click="moveItem(draft.blocks, index, 1)">下移</button><button type="button" @click="draft.blocks.splice(index, 1)">删除块</button></div>
@@ -186,7 +186,7 @@ onMounted(load)
         </fieldset>
         <fieldset :disabled="blocked"><legend>项目截图（最多30张）</legend>
           <div v-for="(shot, index) in draft.screenshots" :key="shot.file_id" class="content-item">
-            <img :src="projectImageUrl(shot.file_id, true)" alt="截图预览"><label>截图说明<input v-model="shot.caption" maxlength="500"></label>
+            <img :src="projectImageUrl(shot.file_id, true)" alt="截图预览"><label>截图说明<input v-model="shot.caption"></label>
             <div class="item-actions"><button type="button" :disabled="index === 0" @click="moveItem(draft.screenshots, index, -1)">上移</button><button type="button" :disabled="index === draft.screenshots.length - 1" @click="moveItem(draft.screenshots, index, 1)">下移</button><button type="button" @click="draft.screenshots.splice(index, 1)">删除截图</button></div>
           </div>
           <ImageUpload v-if="draft.screenshots.length < 30" :api="uploadApi" @update:model-value="addImage($event, 'screenshots')" @unauthenticated="failure({ status: 401 })" />
