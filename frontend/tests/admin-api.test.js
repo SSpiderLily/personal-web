@@ -1,0 +1,62 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { createAdminApi } from '../src/admin/adminApi.js'
+
+const anonymous = { authenticated: false, admin: null, csrf_token: null, expires_at: null }
+const session = { authenticated: true, admin: { id: 1, username: 'admin' }, csrf_token: 'a'.repeat(64), expires_at: '2030-01-01T00:00:00Z' }
+const response = (body, status = 200) => ({ ok: status < 400, status, json: async () => body })
+
+test('session uses same-origin credentials and never browser storage', async () => {
+  let call
+  const api = createAdminApi(async (url, options) => { call = { url, options }; return response(anonymous) })
+  assert.deepEqual(await api.session(), anonymous)
+  assert.equal(call.url, '/api/admin/session')
+  assert.equal(call.options.credentials, 'same-origin')
+  assert.equal(call.options.cache, 'no-store')
+  assert.equal(call.options.method, 'GET')
+})
+
+test('login and logout send explicit JSON write protection and no credentials in URL', async () => {
+  const calls = []
+  const api = createAdminApi(async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/logout') ? anonymous : session) })
+  await api.login('admin', ' test password ', session.csrf_token)
+  await api.logout(session.csrf_token)
+  assert.equal(calls[0].url, '/api/admin/login')
+  assert.deepEqual(JSON.parse(calls[0].options.body), { username: 'admin', password: ' test password ' })
+  assert.equal(calls[0].options.headers['X-Admin-Request'], '1')
+  assert.equal(calls[0].options.headers['X-CSRF-Token'], session.csrf_token)
+  assert.equal(calls[0].options.headers['Content-Type'], 'application/json')
+  assert.equal(calls[1].options.headers['X-CSRF-Token'], session.csrf_token)
+  assert.equal(calls[1].options.credentials, 'same-origin')
+})
+
+test('credential failures expose only a mapped message, never server input or request body', async () => {
+  const api = createAdminApi(async () => response({ error: { code: 'invalid_credentials', message: 'leaked secret password' } }, 401))
+  await assert.rejects(api.login('admin', 'secret password'), error => {
+    assert.equal(error.code, 'invalid_credentials')
+    assert.match(error.message, /账号或密码/)
+    assert.doesNotMatch(error.message, /secret|leaked/)
+    return true
+  })
+})
+
+test('malformed authenticated session cannot open the admin workspace', async () => {
+  const api = createAdminApi(async () => response({ authenticated: true, admin: { id: 1, username: 'admin' } }))
+  await assert.rejects(api.session(), error => error.code === 'unexpected_response')
+})
+
+test('network errors remain generic and do not echo error details', async () => {
+  const api = createAdminApi(async () => { throw new Error('sensitive transport detail') })
+  await assert.rejects(api.session(), error => {
+    assert.equal(error.code, 'network_error')
+    assert.doesNotMatch(error.message, /sensitive/)
+    return true
+  })
+})
+
+test('login and logout reject contradictory success payloads', async () => {
+  const login = createAdminApi(async () => response(anonymous))
+  await assert.rejects(login.login('admin', 'test password'), error => error.code === 'unexpected_response')
+  const logout = createAdminApi(async () => response(session))
+  await assert.rejects(logout.logout(session.csrf_token), error => error.code === 'unexpected_response')
+})

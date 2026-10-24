@@ -2,16 +2,18 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
+import { AdminApiError } from '../src/admin/adminApi.js'
 import { parse, compileScript } from '@vue/compiler-sfc'
 
-function mountAdmin(demoEnabled) {
+function mountAdmin(api) {
   const source = readFileSync(new URL('../src/admin/AdminApp.vue', import.meta.url), 'utf8')
   const { descriptor } = parse(source)
-  const compiled = compileScript(descriptor, { id: 'admin-shell-test', inlineTemplate: true }).content
+  const compiled = compileScript(descriptor, { id: 'admin-shell-test', inlineTemplate: false }).content
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
+    .replace(/^import.*from.*adminApi.*$/gm, '')
     .replace('export default', 'return')
-  const component = new Function('Vue', compiled)(Vue)
+  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', compiled)(Vue, () => api, AdminApiError)
   const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null })
   const renderer = Vue.createRenderer({
     createElement: element, createText: text => element('#text', text),
@@ -30,63 +32,138 @@ function mountAdmin(demoEnabled) {
     nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1],
   })
   const root = element('root')
-  const app = renderer.createApp(component, { demoEnabled })
-  app.mount(root)
+  const app = renderer.createApp({ ...component, render: () => null }, { api })
+  const instance = app.mount(root)
   const nodes = () => { const all = []; const visit = node => { all.push(node); node.children.forEach(visit) }; visit(root); return all }
   const text = () => nodes().map(node => node.text).join(' ')
   const find = (type, label) => nodes().find(node => node.type === type && (!label || node.text === label))
-  return { text, find, nodes, unmount: () => app.unmount() }
+  return { state: instance.$.setupState, unmount: () => app.unmount() }
 }
 
-// Removing the production gate would expose the preview workspace.
-test('production mode never enters a mock session even after a submitted form', async () => {
-  const page = mountAdmin(false)
+
+const anonymous = { authenticated: false, admin: null, csrf_token: null, expires_at: null }
+const authenticated = { authenticated: true, admin: { id: 1, username: 'admin' }, csrf_token: 'a'.repeat(64), expires_at: '2030-01-01T00:00:00Z' }
+const overview = { admin: authenticated.admin, modules: ['projects', 'statistics', 'content', 'tools'].map(id => ({ id, status: 'pending' })) }
+const flush = async () => { await new Promise(resolve => setImmediate(resolve)); await Vue.nextTick() }
+function api(overrides = {}) {
+  return { session: async () => anonymous, login: async () => authenticated, logout: async () => anonymous, overview: async () => overview, ...overrides }
+}
+
+test('session check fails closed and can retry without any simulated login', async () => {
+  let failed = true
+  const page = mountAdmin(api({ session: async () => {
+    if (failed) throw new AdminApiError('network_error', 0)
+    return anonymous
+  } }))
   try {
-    assert.match(page.text(), /真实登录尚未接入/)
-    assert.ok(['', true].includes(page.find('input').props.disabled))
-    assert.equal(page.find('button', '进入本地演示'), undefined)
-    page.find('form').props.onSubmit({ preventDefault() {} })
-    await Vue.nextTick()
-    assert.equal(page.find('nav'), undefined)
+    await flush()
+    assert.equal(page.state.phase, 'unavailable')
+    assert.equal(page.state.session, null)
+    failed = false
+    await page.state.restoreSession()
+    assert.equal(page.state.phase, 'anonymous')
   } finally { page.unmount() }
 })
 
-// Accepting a password or issuing any request/storage write would break this contract.
-test('development preview opens without credentials and has no network or persistent session', async () => {
-  const page = mountAdmin(true)
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = () => { throw new Error('mock login must not call the backend') }
+test('login uses entered credentials once, clears password and opens the protected workspace', async () => {
+  let resolveLogin, calls = 0, supplied
+  const page = mountAdmin(api({ login: (username, password) => {
+    calls++; supplied = { username, password }
+    return new Promise(resolve => { resolveLogin = resolve })
+  } }))
   try {
-    assert.match(page.text(), /请勿输入真实密码/)
-    assert.ok(['', true].includes(page.nodes().find(node => node.props.type === 'password').props.disabled))
-    assert.ok(page.find('button', '进入本地演示'))
-    page.find('form').props.onSubmit({ preventDefault() {} })
-    await Vue.nextTick()
-    assert.ok(page.find('nav'))
-    assert.match(page.text(), /本地演示会话/)
-    assert.match(page.text(), /尚未接入/)
-  } finally { globalThis.fetch = originalFetch; page.unmount() }
+    await flush()
+    page.state.username = ' admin '
+    page.state.password = ' my real test password '
+    const pending = page.state.login()
+    await page.state.login()
+    assert.equal(calls, 1)
+    assert.deepEqual(supplied, { username: 'admin', password: ' my real test password ' })
+    resolveLogin(authenticated)
+    await pending
+    assert.equal(page.state.phase, 'authenticated')
+    assert.equal(page.state.password, '')
+    assert.equal(page.state.session.admin.username, 'admin')
+    assert.equal(page.state.overviewReady, true)
+  } finally { page.unmount() }
 })
 
-// A broken navigation handler, exit handler, or persisted session would fail this flow.
-test('preview navigation shows pending modules and exit/remount returns to the login screen', async () => {
-  const page = mountAdmin(true)
+test('invalid credentials keep login visible and never display or retain the entered password', async () => {
+  const page = mountAdmin(api({ login: async () => { throw new AdminApiError('invalid_credentials', 401) } }))
   try {
-    page.find('form').props.onSubmit({ preventDefault() {} })
-    await Vue.nextTick()
-    for (const label of ['项目管理', '访问统计', '网站内容', '小工具管理']) {
-      page.find('button', label).props.onClick()
-      await Vue.nextTick()
-      assert.equal(page.find('h1').text, label)
-      assert.match(page.text(), /尚未接入/)
-      assert.equal(page.nodes().filter(node => node.type === 'input').length, 0)
-    }
-    page.find('button', '退出演示').props.onClick()
-    await Vue.nextTick()
-    assert.ok(page.find('form'))
-    assert.equal(page.find('nav'), undefined)
+    await flush()
+    page.state.username = 'admin'
+    page.state.password = 'do not echo this password'
+    await page.state.login()
+    assert.equal(page.state.phase, 'anonymous')
+    assert.equal(page.state.session, null)
+    assert.equal(page.state.password, '')
+    assert.match(page.state.error, /账号或密码/)
+    assert.doesNotMatch(page.state.error, /echo/)
   } finally { page.unmount() }
-  const fresh = mountAdmin(true)
-  try { assert.ok(fresh.find('form')); assert.equal(fresh.find('nav'), undefined) }
-  finally { fresh.unmount() }
+})
+
+test('a new mount restores the database session and protected requests detect expiry', async () => {
+  let expired = false
+  const page = mountAdmin(api({
+    session: async () => authenticated,
+    overview: async () => {
+      if (expired) throw new AdminApiError('unauthenticated', 401)
+      return overview
+    },
+  }))
+  try {
+    await flush()
+    assert.equal(page.state.phase, 'authenticated')
+    expired = true
+    await page.state.selectModule('statistics')
+    assert.equal(page.state.phase, 'anonymous')
+    assert.equal(page.state.session, null)
+    assert.match(page.state.error, /失效/)
+  } finally { page.unmount() }
+})
+
+test('logout failure does not pretend the server session was revoked; success clears it', async () => {
+  let failed = true, token
+  const page = mountAdmin(api({
+    session: async () => authenticated,
+    logout: async csrf => {
+      token = csrf
+      if (failed) throw new AdminApiError('network_error', 0)
+      return anonymous
+    },
+  }))
+  try {
+    await flush()
+    await page.state.logout()
+    assert.equal(page.state.phase, 'authenticated')
+    assert.equal(page.state.session.admin.id, 1)
+    assert.ok(page.state.error)
+    assert.equal(token, authenticated.csrf_token)
+    failed = false
+    await page.state.logout()
+    assert.equal(page.state.phase, 'anonymous')
+    assert.equal(page.state.session, null)
+  } finally { page.unmount() }
+})
+
+test('protected content failure stays retryable without making up module data', async () => {
+  let failed = true
+  const page = mountAdmin(api({
+    session: async () => authenticated,
+    overview: async () => {
+      if (failed) throw new AdminApiError('admin_unavailable', 503)
+      return overview
+    },
+  }))
+  try {
+    await flush()
+    assert.equal(page.state.phase, 'authenticated')
+    assert.equal(page.state.overviewReady, false)
+    assert.ok(page.state.error)
+    failed = false
+    await page.state.refreshOverview()
+    assert.equal(page.state.overviewReady, true)
+    assert.equal(page.state.error, '')
+  } finally { page.unmount() }
 })

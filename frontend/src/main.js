@@ -7,5 +7,4 @@ const { default: App } = isAdmin
   : await import('./App.vue')
 if (!isAdmin) await import('./style.css')
 
-// Vite replaces DEV at build time. Production cannot enable the mock via URL/storage.
-createApp(App, isAdmin ? { demoEnabled: import.meta.env.DEV } : {}).mount('#app')
+createApp(App).mount('#app')

@@ -1,54 +1,150 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { createAdminApi, AdminApiError } from './adminApi.js'
 
-const props = defineProps({ demoEnabled: { type: Boolean, default: false } })
-// Preview state is deliberately in memory. It is never an authentication credential.
-const previewActive = ref(false)
+const props = defineProps({ api: { type: Object, default: () => createAdminApi() } })
+const phase = ref('checking')
+const session = ref(null)
+const username = ref('')
+const password = ref('')
+const busy = ref(false)
+const error = ref('')
+const overviewReady = ref(false)
 const selected = ref('projects')
+let alive = true
 const modules = [
-  { id: 'projects', label: '项目管理', index: '01', description: '维护项目内容、图文详情和展示顺序。', scope: '项目列表、草稿、预览、发布与下架', dependency: '等待真实登录、项目接口和图片上传接入。' },
+  { id: 'projects', label: '项目管理', index: '01', description: '维护项目内容、图文详情和展示顺序。', scope: '项目列表、草稿、预览、发布与下架', dependency: '等待项目管理和图片上传接入。' },
   { id: 'statistics', label: '访问统计', index: '02', description: '了解网站和项目的访问人数。', scope: '近 7 天、近 30 天的网站人数与项目浏览人数', dependency: '等待匿名访问记录和去重查询接口接入。' },
   { id: 'content', label: '网站内容', index: '03', description: '让个人介绍与联系方式保持更新。', scope: '姓名、头像、个人简介、联系方式和社交账号', dependency: '等待个人资料接口和图片上传接入。' },
   { id: 'tools', label: '小工具管理', index: '04', description: '安排九宫格工具与独立骰子的展示。', scope: '九宫格展示、排序与独立骰子开关', dependency: '等待工具设置接口接入。' },
 ]
 const current = computed(() => modules.find(module => module.id === selected.value))
-function enterPreview() {
-  if (props.demoEnabled) previewActive.value = true
-}
-function exitPreview() {
-  previewActive.value = false
+function clearSession() {
+  session.value = null
+  password.value = ''
+  overviewReady.value = false
   selected.value = 'projects'
+  phase.value = 'anonymous'
 }
+function failure(reason) {
+  if (!alive) return
+  if (reason?.status === 401 || reason?.code === 'unauthenticated') clearSession()
+  error.value = reason instanceof AdminApiError ? reason.message : '后台暂时不可用，请稍后重试。'
+}
+async function readOverview() {
+  overviewReady.value = false
+  try {
+    await props.api.overview()
+    if (alive) overviewReady.value = true
+  } catch (reason) { failure(reason) }
+}
+async function restoreSession() {
+  if (busy.value) return
+  busy.value = true
+  phase.value = 'checking'
+  error.value = ''
+  try {
+    const value = await props.api.session()
+    if (!alive) return
+    if (!value.authenticated) clearSession()
+    else {
+      session.value = value
+      phase.value = 'authenticated'
+      await readOverview()
+    }
+  } catch (reason) {
+    if (!alive) return
+    clearSession()
+    phase.value = 'unavailable'
+    failure(reason)
+  } finally { if (alive) busy.value = false }
+}
+async function login() {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const value = await props.api.login(username.value.trim(), password.value, session.value?.csrf_token)
+    if (!alive) return
+    session.value = value
+    phase.value = 'authenticated'
+    password.value = ''
+    await readOverview()
+  } catch (reason) { failure(reason) }
+  finally { if (alive) { password.value = ''; busy.value = false } }
+}
+async function logout() {
+  if (busy.value || !session.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await props.api.logout(session.value.csrf_token)
+    if (alive) clearSession()
+  } catch (reason) { failure(reason) }
+  finally { if (alive) busy.value = false }
+}
+async function refreshOverview() {
+  if (busy.value || !session.value) return
+  busy.value = true
+  error.value = ''
+  try { await readOverview() }
+  finally { if (alive) busy.value = false }
+}
+async function selectModule(id) {
+  if (busy.value || !modules.some(module => module.id === id)) return
+  selected.value = id
+  await refreshOverview()
+}
+function onFocus() { if (!busy.value) restoreSession() }
+onMounted(() => {
+  restoreSession()
+  if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
+})
+onBeforeUnmount(() => {
+  alive = false
+  if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus)
+})
 </script>
 
 <template>
   <div class="admin-page">
     <header class="admin-topbar">
       <a class="admin-brand" href="/">我的个人网站<span>.</span></a>
-      <span class="admin-topbar-label">管理后台 · 页面准备</span>
+      <span class="admin-topbar-label">管理后台</span>
       <a class="admin-public-link" href="/">查看公开网站 ↗</a>
     </header>
 
-    <main v-if="!previewActive" class="admin-login">
+    <main v-if="phase !== 'authenticated'" class="admin-login">
       <section class="admin-login-intro" aria-labelledby="admin-login-title">
         <p class="admin-eyebrow">PERSONAL WEBSITE / ADMIN</p>
         <h1 id="admin-login-title">管理员登录<span>.</span></h1>
         <p>一个安静的空间，<br />打理作品与个人网站。</p>
-        <div class="admin-stage-note"><span>阶段 A</span> 登录页、导航与布局预览</div>
+        <div class="admin-stage-note"><span>个人管理</span> 使用终端初始化的管理员账号</div>
       </section>
-      <section class="admin-login-card" aria-label="登录表单">
-        <p class="admin-badge">{{ demoEnabled ? '仅限本地演示' : '页面准备中' }}</p>
-        <h2>{{ demoEnabled ? '预览后台布局' : '真实登录尚未接入' }}</h2>
-        <p id="admin-login-help" class="admin-muted">{{ demoEnabled ? '请勿输入真实密码。演示无需账号和密码，不连接后台，也不修改网站内容。' : '后台当前仅完成页面准备，暂不能登录或管理网站内容。' }}</p>
-        <form autocomplete="off" aria-describedby="admin-login-help" @submit.prevent="enterPreview">
-          <label for="admin-account">管理员账号</label>
-          <input id="admin-account" type="text" placeholder="真实登录接入后填写" disabled />
-          <label for="admin-password">密码</label>
-          <input id="admin-password" type="password" placeholder="演示模式无需密码" disabled />
-          <button v-if="demoEnabled" class="admin-primary" type="submit">进入本地演示</button>
-          <button v-else class="admin-primary" type="submit" disabled>登录暂未开放</button>
-        </form>
-        <p class="admin-form-footnote">{{ demoEnabled ? '演示会话只保留在当前页面，刷新或退出即清除。' : '正式登录与会话验证将在下一阶段接入。' }}</p>
+      <section class="admin-login-card" aria-label="登录表单" :aria-busy="busy">
+        <p class="admin-badge">仅限管理员</p>
+        <template v-if="phase === 'checking'">
+          <h2>正在检查登录状态</h2>
+          <p class="admin-muted" role="status">请稍候…</p>
+        </template>
+        <template v-else-if="phase === 'unavailable'">
+          <h2>暂时无法连接后台</h2>
+          <p class="admin-error" role="alert">{{ error }}</p>
+          <button class="admin-primary admin-retry" type="button" @click="restoreSession">重试连接</button>
+        </template>
+        <template v-else>
+          <h2>欢迎回来</h2>
+          <p id="admin-login-help" class="admin-muted">登录后管理个人网站。尚未创建账号时，请先在终端完成管理员初始化。</p>
+          <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
+          <form aria-describedby="admin-login-help" @submit.prevent="login">
+            <label for="admin-account">管理员账号</label>
+            <input id="admin-account" v-model="username" name="username" type="text" autocomplete="username" placeholder="输入管理员账号" maxlength="64" required :disabled="busy" />
+            <label for="admin-password">密码</label>
+            <input id="admin-password" v-model="password" name="password" type="password" autocomplete="current-password" placeholder="输入密码" maxlength="128" required :disabled="busy" />
+            <button class="admin-primary" type="submit" :disabled="busy">{{ busy ? '正在登录…' : '登录' }}</button>
+          </form>
+          <p class="admin-form-footnote">会话由服务端验证。请在自己的设备上登录，使用后及时退出。</p>
+        </template>
       </section>
     </main>
 
@@ -57,17 +153,21 @@ function exitPreview() {
         <p class="admin-eyebrow">WORKSPACE</p>
         <p class="admin-sidebar-title">网站管理</p>
         <nav class="admin-nav" aria-label="后台模块导航">
-          <button v-for="module in modules" :key="module.id" type="button" :class="{ 'is-current': selected === module.id }" :aria-current="selected === module.id ? 'page' : undefined" @click="selected = module.id">{{ module.label }}</button>
+          <button v-for="module in modules" :key="module.id" type="button" :class="{ 'is-current': selected === module.id }" :aria-current="selected === module.id ? 'page' : undefined" :disabled="busy" @click="selectModule(module.id)">{{ module.label }}</button>
         </nav>
         <div class="admin-session">
           <span class="admin-session-dot" aria-hidden="true"></span>
-          <p>本地演示会话<small>无管理员权限 · 刷新即退出</small></p>
-          <button type="button" class="admin-exit" @click="exitPreview">退出演示</button>
+          <p>{{ session.admin.username }}<small>管理员 · 服务端会话</small></p>
+          <button type="button" class="admin-exit" :disabled="busy" @click="logout">{{ busy ? '请稍候…' : '退出登录' }}</button>
         </div>
       </aside>
-      <main class="admin-content">
-        <div class="admin-demo-banner" role="status"><strong>本地演示</strong><span>仅预览页面与导航，未登录真实后台。所有模块尚未接入，不读取或保存业务数据。</span></div>
-        <section :aria-labelledby="'admin-module-title'" class="admin-module">
+      <main class="admin-content" :aria-busy="busy">
+        <div class="admin-demo-banner"><strong>后台已连接</strong><span>登录状态由服务端验证。业务模块将按后续阶段逐步接入。</span></div>
+        <div v-if="error" class="admin-error-panel" role="alert">
+          <p>{{ error }}</p>
+          <button type="button" :disabled="busy" @click="refreshOverview">重试</button>
+        </div>
+        <section v-if="overviewReady" :aria-labelledby="'admin-module-title'" class="admin-module">
           <p class="admin-eyebrow">{{ current.index }} / WEBSITE MANAGEMENT</p>
           <h1 id="admin-module-title">{{ current.label }}</h1>
           <p class="admin-module-description">{{ current.description }}</p>
@@ -78,11 +178,12 @@ function exitPreview() {
             <p>{{ current.scope }}</p>
             <p class="admin-muted">{{ current.dependency }}</p>
           </div>
-          <p class="admin-module-note">当前为页面准备，暂不提供编辑和保存操作。</p>
+          <p class="admin-module-note">当前已接通登录与后台框架，业务模块暂不提供编辑和保存操作。</p>
         </section>
+        <p v-else-if="!error" class="admin-muted" role="status">正在读取后台入口…</p>
       </main>
     </div>
-    <footer class="admin-footer">一步一步，把想法变成作品。<span>后台页面准备 · 阶段 A</span></footer>
+    <footer class="admin-footer">一步一步，把想法变成作品。<span>个人网站管理后台</span></footer>
   </div>
 </template>
 
@@ -114,6 +215,10 @@ function exitPreview() {
 .admin-login-card label { font-size: 12px; margin: 0 0 8px; }
 .admin-login-card input { width: 100%; min-height: 44px; padding: 12px; border: 1px solid var(--admin-line); border-radius: 6px; background: #f5f6f0; color: var(--admin-muted); margin-bottom: 20px; font-size: 12px; opacity: 1; }
 .admin-login-card input::placeholder { color: #8a9486; }
+.admin-error { color: #a33e35; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.admin-retry { width: 100%; }
+.admin-error-panel { padding: 12px 16px; margin-top: 18px; border: 1px solid #dfbdb6; border-radius: 8px; color: #a33e35; font-size: 12px; }
+.admin-error-panel button { background: transparent; border: 0; color: inherit; text-decoration: underline; min-height: 36px; }
 .admin-primary { min-height: 44px; border: 0; border-radius: 6px; background: var(--admin-green); color: #fff; font-size: 12px; }
 .admin-primary:hover:not(:disabled) { background: #2e4e35; }
 .admin-primary:disabled { background: #dfe5d9; color: #6d7c67; }
