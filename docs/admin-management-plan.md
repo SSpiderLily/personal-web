@@ -451,3 +451,27 @@
 - [ ] 固定上述前端合同、首访协调与失败策略，再建立两线目录并执行失败测试→实现→提交；两线独立审查后由集成方普通merge。
 - [ ] 集成方接唯一首页/详情入口和真实受保护统计面板，验证未登录/失效会话、隐藏/全隐藏工具、项目/资料编辑和图片权限无回归，再做临时浏览器联合验收。
 - [ ] 按需要复用现有141项隔离SQL、前端测试/构建及限定新增测试；真实预览接线、用户接受、Git/push/部署分别记证据。7B通过技术及用户验收才把任务7计入完成；8B生产HTTPS、发布迁移、备份恢复仍另行执行。
+
+## 阶段 E 执行合同（2026-10-24）
+
+用户已授权按准备建议固定参数并建立两条线执行。本节替代上节草案/开工前待固定项；现有7A路由/数据合同保持，三目录已建立，集成分支codex/admin-phase-e、两线codex/admin-e-visits/codex/admin-e-statistics。技术/用户/真实环境验收分别记录；当前整体6/8，未实现完成不计7。产品继续Vue3/FastAPI/psycopg，无新运行依赖、SQL迁移、默认内容初始化；不fetch/push/main合并/生产操作。D预览和用户数据保留至技术验证后切E。
+
+### 固定接口和参数
+
+- 复用已有`POST /api/admin/visits`，JSON/X-Admin-Request:1、credentials:same-origin、cache:no-store，仅website body`{kind:'website'}`及project body`{kind:'project',project_id:正安全整数}`。响应精确`{recorded:boolean}`；true包含重复，false合法未记录，任何失败不影响内容/不弹阻断提示、不记假零值。服务端维持真实管理员会话排除、固定一年HttpOnly访客Cookie/Strict/路径/api/admin/visits、生产Secure及同源保护；不传CSRF/身份/日期/preview字段，不读Cookie/用JS持久id，不用sendBeacon。
+- 访问线导出`createVisitCollector({fetchImpl,locks,timeoutMs=5000}={})`，默认fetch浏览器fetch，locks默认navigator.locks（可注入null模拟无能力）。返回`website():Promise<boolean>`、`project(id):Promise<boolean>`、`dispose():void`；返回布尔为recorded，失败/非法id/销毁后统一false，从不向调用方抛未处理异常。禁止自动重试；每次真正打开项目可请求，不永久缓存项目id漏掉跨日事件。website每实例仅接首页一次，调用失败后不自动重放。dispose取消等待/在途、清空未发队列，之后不发请求，需忽略销毁后响应。
+- 同页全请求串行；支持Web Locks时所有记录都请求同源exclusive锁`personal-web-visits-v1`，锁内等待fetch和响应解析结束再释放（HttpOnly不能判断Cookie是否已建立，所以不只锁第一个请求）。每项开始处理后5秒总预算涵盖锁等待、fetch与解析，AbortController同时取消待锁/网络；自身队列不并发。lock存在却异常/超时不能无锁重发；无Web Locks能力才降级同页队列，首次多标签的零重复不作保证，在README说明近似边界。无论异常/超时不能卡住后续队列。参考[MDN Web Locks](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)及[request](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request)。
+- 统计线导出`parseStatistics(value,expectedDays)`，只接受expectedDays为整数7/30且响应days一致、timezone精确Asia/Shanghai、合法ISO日历日期start_date/end_date且含首尾跨度7/30天、website_visitors非负安全整数、projects数组中每项project_id唯一正安全整数、name字符串(允许空)、visitors非负安全整数；拒绝不安全数字/非法日期/重复id/不匹配响应，不把异常转换0。返回规范化深拷贝对象（7个顶层字段），不暴露raw对象。日期不按客户端当前时区/时钟重新推导，0为真实合法值。server现有项目排序和下架历史保持，不根据公开列表过滤、不假设各项目可相加为网站人数。
+- `StatisticsPanel.vue` props api对象仅`load(days)`返回现有统计对象；emit unauthenticated；初始7天，可切30和显式刷新/重试。请求序号决定最后一次有效响应，切换即不把旧数据展示在新区间，只有当前请求可更新loading/error/data或触发401。旧请求成功/失败都忽略；卸载后不更新/emit。401交共用会话清除，403/503/网络错误显示可重试，不回显服务端原始文本、不卸载其他模块草稿。
+- 统计页面显示网站访问人数卡片、项目浏览人数表及服务端区间日期/北京时间提示。未命名项目显示“未命名项目 #id”，项目为空显示空态；未知不显示0。明确同一匿名浏览器在整个区间内独立去重、管理员与预览排除、不是浏览次数；不增加趋势图/每日合计/来源/点击等需求。组件样式沿用后台，键盘和390px窄屏可操作。
+- 集成方给createAdminApi新增`statistics(days)`受保护GET（现有10秒timeout）；AdminApp适配api.load并延迟挂载/保持实例、401共用处理；后台overview.statistics仅在接通后改ready。App.vue仅真实公开首页挂载建立一个collector、登记project-opened监听后调用website，不能等待profile/project读取成功。DOM项目事件detail.project_id必须安全整数，关闭/失败旧详情不会发事件；不在ProjectContent/预览/卡片再接线。公开App卸载先解绑再dispose。首页限定真实`/`路径；不在/admin或/trip/记录个人网站访问。不新增客户端身份判断，不发送生产请求验证。
+
+### 文件归属和实施步骤
+
+- [ ] E记录线：只新增frontend/src/statistics/visitCollector.js和frontend/tests/visit-collector.test.js。先失败测试，覆盖精确请求合同/true及false、串行Cookie首访、共享锁多实例协调、无锁降级、锁拒绝/超时/坏JSON/HTTP/网络故障后队列继续、非法id、重复website、dispose/延迟回调。可注入短测试timeout但默认必须5000；不改App/main/adminApi/依赖/后端。实现并提交，经独立规格/质量审查。
+- [ ] E界面线：只新增frontend/src/statistics/statisticsModel.js、frontend/src/admin/StatisticsPanel.vue和frontend/tests/statistics-panel.test.js。先失败测试：严格日期/数值/响应/唯一id、零值/空态/历史项目、真实组件7/30快速切换旧成功/失败及401、当前401/503重试、卸载安全；实现并提交，经独立规格/质量审查。不改共用入口/API/README/计划。
+- [ ] 集成方：独占App.vue/AdminApp.vue/adminApi.js/overview和相关共用测试、后端修正、文档/INDEX。增加真实父子组件/公开事件接线及临时数据库浏览器联合验收，普通merge两线、整体独立审查后才切5182/8010到E。沿用已有SQL去重/管理员排除，若需修7A先证据再最小修复；不得用真实开发数据跑fixture或清表。
+
+### 联合验收
+
+临时PostgreSQL与临时账号/图片，两个匿名标签同一全新浏览器同时加载首页/打开已发布项目，稳定Cookie后多次访问和跨日/7及30天独立去重；管理员同浏览器看前台/后台预览不计数，独立匿名浏览器计数；记录失败/锁超时不影响项目/资料/工具/骰子，刷新7/30旧响应不能覆盖新区间；下架前历史仍显示且下架后新打开不记录，猜id/失败加载/关闭后旧详情不计项目；Cookie路径、HTTP保护和真实组件状态需浏览器证据。测试流量只在临时库，真实开发保留原项目/头像/工具/账号，切E后仅自然访问可产生开发统计；不宣称生产真实流量或备份/HTTPS已验收。
