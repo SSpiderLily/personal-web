@@ -2,7 +2,7 @@
 
 目标：解决个人网站没有管理后台的问题；第一版只做后台框架和基本功能。
 
-状态（2026-10-24）：阶段 A 三条线已实现并合入本地 codex/admin-phase-a。任务 1 数据库基础完成技术验收，八项完整任务计 1/8；2A 后台页面准备已实现并技术验证，真实登录 2B 未开始；8A 部署方案已交付并审查，建议参数待接受、8B 未实施。统一检查、隔离数据库专项及开发库驱动只读冒烟通过，证据见[验证记录](validation-log.md)。本轮未推送、未合并 main、未部署；生产仍运行 f01d1fe，已验证的生产配置与账号隔离保持原状。
+状态（2026-10-24）：阶段 A 三条线已实现并合入本地 codex/admin-phase-a。任务 1 数据库基础完成技术验收，八项完整任务计 1/8；2A 后台页面准备已实现并技术验证，真实登录 2B 进行中；8A 部署方案已交付并审查，建议参数待接受、8B 未实施。统一检查、隔离数据库专项及开发库驱动只读冒烟通过，证据见[验证记录](validation-log.md)。本轮未推送、未合并 main、未部署；生产仍运行 f01d1fe，已验证的生产配置与账号隔离保持原状。
 
 ## 已确认需求
 
@@ -101,7 +101,7 @@
 
 | 交付项 | 工作内容与交付条件 | 前置依赖 | 当前状态 |
 |---|---|---|---|
-| 2B：登录与后台框架验收 | 管理员初始化、登录/退出、可失效会话、共用鉴权及写保护；未登录不能访问管理接口，前台保持公开。 | 1、2A；登录有效期与初始化方案确定 | 未开始 |
+| 2B：登录与后台框架验收 | 管理员初始化、登录/退出、可失效会话、共用鉴权及写保护；未登录不能访问管理接口，前台保持公开。 | 1、2A；本节阶段 B 实施选择 | 进行中 |
 
 **阶段 C：图片上传、工具管理、统计基础并行。** 三条线分别推进，不要求工具管理等待图片或项目管理完成。
 
@@ -240,6 +240,28 @@
 ## 2026-10-24：准备基线合并与发布授权
 
 用户确认先将准备基线合并到 main 并触发既有自动部署，随后由用户手动完成服务器生产环境配置。此次授权覆盖本分支推送、PR 创建、检查通过后合并及自动发布；不由助手填写生产凭据或修改 systemd。当前业务 API 尚不访问数据库，直接 Gunicorn 启动不调用开发隧道；生产配置仍待用户接入。实际 PR、CI、部署结果及服务器版本以验证记录后续核验为准，不从授权推断完成。
+
+## 阶段 B：真实登录与后台框架（2026-10-24）
+
+用户已接受阶段 A 页面效果，并授权开始 2B。本轮沿用现有后台布局、数据库作用域和十表结构；本地实现、测试和提交，不推送、不合并 main、不部署或修改生产环境。管理员初始化由终端交互输入密码，不在聊天、参数、环境模板或 Git 中保存真实密码；未获凭据输入前不代建真实云端管理员。隔离实例中使用测试账号验收完整登录。
+
+实施选择（助手按本轮范围确定，可通过配置调整）：会话默认 8 小时；密码使用 Argon2 哈希；浏览器仅持有随机会话 Cookie，数据库仅存 SHA-256 摘要。HttpOnly、SameSite=Strict，production 设置 Secure 并拒绝非 HTTPS 的管理访问；不依赖 localStorage 或模拟身份。生产 HTTPS 尚未落实，不把本地登录验收等同生产开放。密码哈希参考 [FastAPI 官方方案](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)，同源写保护参考 [OWASP CSRF 指南](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。
+
+接口交接：
+- GET /api/admin/session：200，统一响应 authenticated、admin（id/username 或 null）、csrf_token（或 null）、expires_at（ISO 时间或 null）；匿名不必连接数据库。
+- POST /api/admin/login：JSON username/password；成功返回相同会话响应并设置 personal_web_session（Path=/api/admin，host-only）；每次成功发新令牌并撤销当前旧会话。错误账号/密码统一401，不泄露是否存在账号。
+- POST /api/admin/logout：需当前会话和写保护；服务端撤销成功后返回匿名会话响应并清Cookie，失败不能在页面伪装已退出。
+- GET /api/admin/overview：需真实登录，返回 admin 与四个模块（projects/statistics/content/tools，id/label/status=pending）；不编造项目内容或统计值。
+- 管理写操作（含登录）需 X-Admin-Request: 1、精确允许的 Origin 和 JSON；已登录写操作另需 X-CSRF-Token，与当前会话绑定。不开放跨域CORS。公开 /api/health、/api/profile、/api/dice/roll 保持原契约。
+- 错误统一为 error.code/message；invalid_credentials、unauthenticated、csrf_failed、origin_forbidden、admin_unavailable、invalid_request。输入验证/数据库错误不得回显密码或请求体，认证响应 no-store。
+- Settings 增加 ADMIN_SESSION_HOURS（默认8）和 ADMIN_ALLOWED_ORIGINS；开发默认允许 localhost/127.0.0.1 的5180、5182端口，生产须明确配置可信HTTPS来源才可使用管理接口。不能信任任意客户端转发头或通配来源。
+
+执行与归属：
+1. 后端工作线交付 app/admin_auth.py（或同责模块）、路由、管理员初始化 CLI、Settings、依赖/锁文件及离线/真实PG测试。初始化仅一个账号，重复或并发初始化不得覆盖；终端双次输入确认密码（12—128字符），无默认密码。复用001，不修改已执行SQL；有必要结构变更先交集成方核对。
+2. 前端工作线接入真实 session/login/logout/overview，删除模拟登录入口与权限状态；刷新恢复会话、未登录只显示登录页、会话失效返回登录页，网络错误可重试；请求凭据仅同源Cookie，CSRF只存内存。保留用户已接受布局，模块仍标待接入。
+3. 集成方统一更新本计划/README/验证记录和INDEX；后端与前端按上述接口分工，不并发修改同一入口。保留阶段A预览，待真实链路验收后切换本地预览。
+4. 先写失败测试再实现。测试覆盖错误凭据/畸形输入不泄密、会话刷新/退出/过期/撤销/重启可用、匿名管理接口拒绝、Origin/CSRF/生产Secure与HTTPS、初始化重复/并发、数据库故障、公开接口回归；真实数据库测试只在自建临时集群。
+5. 完成统一检查、数据库专项、隔离数据库上的浏览器真实登录/刷新/退出/保护验证与独立代码审查。技术实现、人工接受、云端初始化、生产验收分别记录。真实开发账号由用户终端初始化后才可验收个人凭据登录，本轮不假冒该项已完成。
 
 
 归档条件：基本后台实施完成后，按 [production 统一归档规则](../../AGENTS.md#文档管理)执行。
