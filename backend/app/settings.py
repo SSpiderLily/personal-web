@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     # until database integration; production must always explicitly supply it.
     db_password: SecretStr = Field(default_factory=lambda: SecretStr(""), repr=False, exclude=True)
 
+    # Optional, private storage; missing configuration only disables upload routes.
+    upload_dir: str | None = None
+
+    @field_validator("upload_dir")
+    @classmethod
+    def absolute_upload_dir(cls, value: str | None) -> str | None:
+        if value is not None and ("\x00" in value or not Path(value).is_absolute() or ".." in Path(value).parts):
+            raise ValueError("UPLOAD_DIR must be an absolute directory path without parent traversal")
+        return value
+
     admin_session_hours: int = Field(default=8, ge=1, le=168)
     # Environment syntax: JSON array of exact origins. Production defaults closed.
     admin_allowed_origins: tuple[str, ...] = ()

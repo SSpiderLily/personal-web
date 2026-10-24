@@ -122,6 +122,20 @@ def require_admin_write(request: Request, settings: Settings = Depends(require_w
     return session
 
 
+def require_admin_upload(request: Request, settings: Settings = Depends(check_admin_access)) -> AdminSession:
+    """Upload-only protection; called before reading any multipart/body bytes."""
+    if (request.headers.get('x-admin-request') != '1'
+            or request.headers.get('origin') not in settings.admin_allowed_origins):
+        raise AdminError(403, 'origin_forbidden', '此来源不能执行管理操作。')
+    session = current_session(request, settings)
+    if session is None:
+        raise unauthenticated()
+    check_csrf(request, session)
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'multipart/form-data':
+        raise invalid_request()
+    return session
+
+
 def check_csrf(request: Request, session: AdminSession) -> None:
     supplied = request.headers.get('x-csrf-token', '')
     if not hmac.compare_digest(supplied.encode('utf-8'), session.csrf_token.encode('ascii')):
