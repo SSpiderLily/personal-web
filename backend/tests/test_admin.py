@@ -1,5 +1,6 @@
 """Admin HTTP boundaries without a database; no network or credentials."""
 import unittest
+from unittest.mock import patch
 import json
 from fastapi.testclient import TestClient
 from app.main import app
@@ -81,6 +82,23 @@ class AdminBoundaryTests(unittest.TestCase):
                      {'username': 'owner', 'password': '\ud800'}):
             with self.subTest(field=next(k for k,v in body.items() if '\x00' in v or '\ud800' in v)):
                 self.error(self.client.post('/api/admin/login', headers=WRITE | {'Content-Type': 'application/json'}, content=json.dumps(body)), 400, 'invalid_request')
+
+    def test_bootstrap_rejects_unloginable_characters_before_hash_or_write(self):
+        from app import admin_init
+        settings = Settings(app_env='test')
+        for case, username, password in (('NUL username', 'owner\x00', 'disposable-test-password'),
+                                         ('NUL password', 'owner', 'disposable\x00-test-password'),
+                                         ('surrogate username', 'owner\ud800', 'disposable-test-password'),
+                                         ('surrogate password', 'owner', 'disposable\ud800-test-password')):
+            with self.subTest(case=case), \
+                    patch.object(admin_init.PASSWORDS, 'hash') as hash_password, \
+                    patch('app.admin_init.transaction') as transaction:
+                with self.assertRaises(admin_init.AdminInitializationError) as error:
+                    admin_init.initialize_admin(settings, username, password)
+                self.assertNotIn(username, str(error.exception))
+                self.assertNotIn(password, str(error.exception))
+                hash_password.assert_not_called()
+                transaction.assert_not_called()
 
     def test_database_outage_session_and_logout_do_not_appear_anonymous(self):
         app.dependency_overrides[get_settings] = lambda: Settings(app_env='test', debug=True, db_port=25431, db_name='personal_web_test_unavailable', db_user='personal_web_test')

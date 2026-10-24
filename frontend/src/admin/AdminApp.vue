@@ -19,9 +19,9 @@ const modules = [
   { id: 'tools', label: '小工具管理', index: '04', description: '安排九宫格工具与独立骰子的展示。', scope: '九宫格展示、排序与独立骰子开关', dependency: '等待工具设置接口接入。' },
 ]
 const current = computed(() => modules.find(module => module.id === selected.value))
-function clearSession() {
+function clearSession({ preservePassword = false } = {}) {
   session.value = null
-  password.value = ''
+  if (!preservePassword) password.value = ''
   overviewReady.value = false
   selected.value = 'projects'
   phase.value = 'anonymous'
@@ -40,16 +40,18 @@ async function readOverview() {
 }
 async function restoreSession() {
   if (busy.value) return
+  const wasAnonymous = phase.value === 'anonymous'
   busy.value = true
-  phase.value = 'checking'
+  if (!wasAnonymous) phase.value = 'checking'
   error.value = ''
   try {
     const value = await props.api.session()
     if (!alive) return
-    if (!value.authenticated) clearSession()
+    if (!value.authenticated) clearSession({ preservePassword: wasAnonymous })
     else {
       session.value = value
       phase.value = 'authenticated'
+      password.value = ''
       await readOverview()
     }
   } catch (reason) {

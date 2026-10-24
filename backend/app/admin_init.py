@@ -31,6 +31,13 @@ def initialize_admin(settings: Settings, username: str, password: str) -> None:
         raise AdminInitializationError('Username must contain 1–64 characters without surrounding whitespace.')
     if not isinstance(password, str) or not 12 <= len(password) <= 128:
         raise AdminInitializationError('Password must contain 12–128 characters.')
+    try:
+        username.encode('utf-8')
+        password.encode('utf-8')
+    except UnicodeError:
+        raise AdminInitializationError('Username and password contain unsupported characters.') from None
+    if '\x00' in username or '\x00' in password:
+        raise AdminInitializationError('Username and password contain unsupported characters.')
     encoded = PASSWORDS.hash(password)
     try:
         with transaction(settings) as conn:

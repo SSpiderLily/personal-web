@@ -65,6 +65,34 @@ test('session check fails closed and can retry without any simulated login', asy
   } finally { page.unmount() }
 })
 
+test('anonymous focus refresh preserves a draft and still discovers sign-in from another tab', async () => {
+  let current = anonymous, delayRefresh = false, resolveRefresh
+  const page = mountAdmin(api({ session: async () => {
+    if (delayRefresh) return new Promise(resolve => { resolveRefresh = resolve })
+    return current
+  } }))
+  try {
+    await flush()
+    assert.equal(page.state.phase, 'anonymous')
+    page.state.username = 'draft-admin'
+    page.state.password = 'draft-password'
+    delayRefresh = true
+    const pending = page.state.restoreSession()
+    assert.equal(page.state.phase, 'anonymous')
+    resolveRefresh(anonymous)
+    await pending
+    assert.equal(page.state.username, 'draft-admin')
+    assert.equal(page.state.password, 'draft-password')
+    assert.equal(page.state.phase, 'anonymous')
+    delayRefresh = false
+    current = authenticated
+    await page.state.restoreSession()
+    assert.equal(page.state.phase, 'authenticated')
+    assert.equal(page.state.session.admin.username, 'admin')
+    assert.equal(page.state.password, '')
+  } finally { page.unmount() }
+})
+
 test('login uses entered credentials once, clears password and opens the protected workspace', async () => {
   let resolveLogin, calls = 0, supplied
   const page = mountAdmin(api({ login: (username, password) => {
@@ -141,9 +169,11 @@ test('logout failure does not pretend the server session was revoked; success cl
     assert.ok(page.state.error)
     assert.equal(token, authenticated.csrf_token)
     failed = false
+    page.state.password = 'should clear on logout'
     await page.state.logout()
     assert.equal(page.state.phase, 'anonymous')
     assert.equal(page.state.session, null)
+    assert.equal(page.state.password, '')
   } finally { page.unmount() }
 })
 
