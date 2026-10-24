@@ -23,10 +23,7 @@ class AdminInitializationError(ValueError):
     """Safe bootstrap rejection, without credential input."""
 
 
-def initialize_admin(settings: Settings, username: str, password: str) -> None:
-    """Atomic single-admin insert. Database constraints arbitrate concurrent calls."""
-    if settings.app_env == 'production':
-        raise AdminInitializationError('Production initialization is unavailable in phase B; use a separately approved production procedure.')
+def _credential_hash(username: str, password: str) -> str:
     if not isinstance(username, str) or not 1 <= len(username) <= 64 or username != username.strip():
         raise AdminInitializationError('Username must contain 1–64 characters without surrounding whitespace.')
     if not isinstance(password, str) or not 12 <= len(password) <= 128:
@@ -39,6 +36,14 @@ def initialize_admin(settings: Settings, username: str, password: str) -> None:
     if '\x00' in username or '\x00' in password:
         raise AdminInitializationError('Username and password contain unsupported characters.')
     encoded = PASSWORDS.hash(password)
+    return encoded
+
+
+def initialize_admin(settings: Settings, username: str, password: str) -> None:
+    """Atomic single-admin insert. Database constraints arbitrate concurrent calls."""
+    if settings.app_env == 'production':
+        raise AdminInitializationError('Production initialization is unavailable in phase B; use a separately approved production procedure.')
+    encoded = _credential_hash(username, password)
     try:
         with transaction(settings) as conn:
             conn.execute('INSERT INTO admin_accounts(id,username,password_hash) VALUES (1,%s,%s)', (username, encoded))

@@ -48,6 +48,34 @@ def _load_migrations(directory: Path) -> list[Migration]:
     return migrations
 
 
+def migration_history(conn, migrations, *, create=False):
+    """Validate an immutable ordered prefix; read-only mode never creates history."""
+    if create:
+        conn.execute('''CREATE TABLE IF NOT EXISTS schema_migrations (
+            version varchar(100) PRIMARY KEY,
+            checksum varchar(64) NOT NULL CHECK (checksum ~ '^[0-9a-f]{64}$'),
+            applied_at timestamptz NOT NULL DEFAULT now()
+        )''')
+    elif conn.execute("SELECT to_regclass('public.schema_migrations')").fetchone()[0] is None:
+        return []
+    history = conn.execute('SELECT version, checksum FROM public.schema_migrations ORDER BY version').fetchall()
+    expected = [(migration.version, migration.checksum) for migration in migrations]
+    if history != expected[:len(history)]:
+        raise MigrationError('Migration version/checksum history mismatch; refusing changes')
+    return history
+
+
+def _apply_on_connection(conn, migrations):
+    history = migration_history(conn, migrations, create=True)
+    applied = []
+    for migration in migrations[len(history):]:
+        conn.execute(migration.sql)
+        conn.execute('INSERT INTO schema_migrations(version, checksum) VALUES (%s, %s)',
+                     (migration.version, migration.checksum))
+        applied.append(migration.version)
+    return applied
+
+
 def apply_migrations(directory: Path = MIGRATIONS) -> list[str]:
     """Apply all pending versions; return applied names, [] for a verified no-op."""
     settings = get_settings()
@@ -65,20 +93,7 @@ def apply_migrations(directory: Path = MIGRATIONS) -> list[str]:
             conn.execute("SET LOCAL lock_timeout = '5s'")
             conn.execute("SET LOCAL statement_timeout = '30s'")
             conn.execute('SELECT pg_advisory_xact_lock(%s)', (LOCK_ID,))
-            conn.execute('''CREATE TABLE IF NOT EXISTS schema_migrations (
-                version varchar(100) PRIMARY KEY,
-                checksum varchar(64) NOT NULL CHECK (checksum ~ '^[0-9a-f]{64}$'),
-                applied_at timestamptz NOT NULL DEFAULT now()
-            )''')
-            history = conn.execute('SELECT version, checksum FROM schema_migrations ORDER BY version').fetchall()
-            expected = [(migration.version, migration.checksum) for migration in migrations]
-            if history != expected[:len(history)]:
-                raise MigrationError('Migration version/checksum history mismatch; refusing changes')
-            for migration in migrations[len(history):]:
-                conn.execute(migration.sql)
-                conn.execute('INSERT INTO schema_migrations(version, checksum) VALUES (%s, %s)',
-                             (migration.version, migration.checksum))
-                applied.append(migration.version)
+            applied = _apply_on_connection(conn, migrations)
     except psycopg.Error:
         raise MigrationError('Migration failed; all pending changes rolled back') from None
     return applied
