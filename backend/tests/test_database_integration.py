@@ -1,6 +1,7 @@
 """Only scripts/test-db.sh enables these against its own disposable cluster."""
 from concurrent.futures import ThreadPoolExecutor
 import os
+import hashlib
 import subprocess
 from pathlib import Path
 import tempfile
@@ -39,14 +40,15 @@ class DatabaseIntegrationTests(unittest.TestCase):
         self.assertTrue(conn.closed)
 
     def test_repeated_migration_keeps_existing_data_and_constraints(self):
-        self.assertEqual(migrate.apply_migrations(), ['001_admin_schema'])
+        self.assertEqual(migrate.apply_migrations(), ['001_admin_schema', '002_tool_defaults'])
         with database.transaction() as conn:
             project_id = conn.execute("INSERT INTO projects(name) VALUES ('retain me') RETURNING id").fetchone()[0]
         self.assertEqual(migrate.apply_migrations(), [])
         with database.connection() as conn:
             self.assertEqual(conn.execute('SELECT name FROM projects').fetchall(), [('retain me',)])
-            self.assertEqual(conn.execute('SELECT count(*) FROM schema_migrations').fetchone(), (1,))
-            for table in ('admin_accounts', 'admin_sessions', 'uploaded_files', 'site_profile', 'tool_settings', 'site_daily_visitors', 'project_daily_visitors', 'project_blocks', 'project_screenshots'):
+            self.assertEqual(conn.execute('SELECT count(*) FROM schema_migrations').fetchone(), (2,))
+            self.assertEqual(conn.execute('SELECT count(*) FROM tool_settings').fetchone(), (10,))
+            for table in ('admin_accounts', 'admin_sessions', 'uploaded_files', 'site_profile', 'site_daily_visitors', 'project_daily_visitors', 'project_blocks', 'project_screenshots'):
                 self.assertEqual(conn.execute(f'SELECT count(*) FROM {table}').fetchone(), (0,))
         with self.assertRaises(psycopg.errors.ForeignKeyViolation):
             with database.transaction() as conn:
@@ -99,7 +101,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
                     self.assertLess(time.monotonic(), deadline, 'both migration callers must wait on the advisory lock')
                     time.sleep(.02)
             results = [future.result(timeout=5) for future in futures]
-        self.assertEqual(sorted(results, key=len), [[], ['001_admin_schema']])
+        self.assertEqual(sorted(results, key=len), [[], ['001_admin_schema', '002_tool_defaults']])
 
     def test_existing_psql_entry_and_python_share_history(self):
         from app.settings import Settings, get_settings
@@ -118,7 +120,10 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
         local_dev = Settings(app_env='development', db_host=settings.db_host, db_port=settings.db_port,
                              db_name='personal_web_dev', db_user='personal_web_dev', db_password='')
+        with database.connection(local_dev) as conn:
+            self.assertEqual(conn.execute('SELECT version, checksum FROM schema_migrations').fetchall(), [('001_admin_schema', checksum)])
         with patch.object(migrate, 'get_settings', return_value=local_dev):
+            self.assertEqual(migrate.apply_migrations(), ['002_tool_defaults'])
             self.assertEqual(migrate.apply_migrations(), [])
         # A psql mismatch fails without replacing the existing history.
         result = subprocess.run(psql + ['-v', 'migration_checksum=' + '0' * 64,
@@ -126,8 +131,8 @@ class DatabaseIntegrationTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         with database.connection(local_dev) as conn:
-            self.assertEqual(conn.execute('SELECT version, checksum FROM schema_migrations').fetchall(),
-                             [('001_admin_schema', checksum)])
+            self.assertEqual(conn.execute('SELECT version, checksum FROM schema_migrations ORDER BY version').fetchall(),
+                             [('001_admin_schema', checksum), ('002_tool_defaults', hashlib.sha256((migrate.MIGRATIONS / '002_tool_defaults.sql').read_bytes()).hexdigest())])
 
     def test_later_version_extends_schema_without_replaying_old_version(self):
         with tempfile.TemporaryDirectory() as directory:
