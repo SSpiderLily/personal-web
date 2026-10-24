@@ -8,12 +8,13 @@ const empty = () => ({ name: '', title: '', introduction: '', skills: [], avatar
 const clone = value => JSON.parse(JSON.stringify(value))
 const draft = ref(empty())
 const baseline = ref(empty())
+const skillsText = ref('')
+const uploadedAvatar = ref(null)
 const uploading = ref(false)
 const uploadApi = { async upload(file) { uploading.value = true; try { return await props.api.upload(file) } finally { uploading.value = false } } }
 const loading = ref(false), saving = ref(false), ready = ref(false), error = ref(''), saved = ref(false)
-const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(baseline.value))
+const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(baseline.value) || skillsText.value !== baseline.value.skills.join('\n'))
 const avatar = computed(() => draft.value.avatar_file_id ? { id: draft.value.avatar_file_id, url: `/api/admin/files/${draft.value.avatar_file_id}` } : null)
-const skillsText = computed({ get: () => draft.value.skills.join('\n'), set: value => { draft.value.skills = value.split('\n').filter(item => item.trim()) } })
 function normalized(value) {
   const result = empty()
   for (const key of ['name', 'title', 'introduction']) {
@@ -30,14 +31,14 @@ function normalized(value) {
   }
   return result
 }
-function clearDraft() { draft.value = empty(); baseline.value = empty(); ready.value = false; saved.value = false }
+function clearDraft() { draft.value = empty(); baseline.value = empty(); skillsText.value = ''; uploadedAvatar.value = null; ready.value = false; saved.value = false }
 function failure(reason) {
   if (reason?.status === 401) { clearDraft(); error.value = '登录已失效，请重新登录。'; emit('unauthenticated') }
   else if (reason?.status === 400) error.value = '资料格式不正确，请检查长度、链接和头像后重试。'
   else if (reason?.status === 403) error.value = '安全验证失败，请刷新页面后重试。'
   else error.value = '资料暂时不可用，请稍后重试。'
 }
-function accept(value) { const item = normalized(value); draft.value = clone(item); baseline.value = clone(item); ready.value = true }
+function accept(value) { const item = normalized(value); draft.value = clone(item); baseline.value = clone(item); skillsText.value = item.skills.join('\n'); uploadedAvatar.value = null; ready.value = true }
 async function load() {
   if (loading.value || saving.value || uploading.value) return
   loading.value = true; error.value = ''
@@ -48,12 +49,23 @@ async function load() {
 async function save() {
   if (!ready.value || loading.value || saving.value || uploading.value || !dirty.value) return
   saving.value = true; error.value = ''; saved.value = false
-  try { accept(await props.api.save(clone(draft.value))); saved.value = true }
+  try {
+    const payload = clone(draft.value)
+    payload.skills = skillsText.value.split('\n').map(item => item.trim()).filter(Boolean)
+    accept(await props.api.save(payload)); saved.value = true
+  }
   catch (reason) { failure(reason) }
   finally { saving.value = false }
 }
-function reset() { if (!saving.value) { draft.value = clone(baseline.value); error.value = ''; saved.value = false } }
-function setAvatar(value) { if (ready.value) draft.value.avatar_file_id = value?.id || null }
+function reset() { if (!saving.value) { draft.value = clone(baseline.value); skillsText.value = baseline.value.skills.join('\n'); uploadedAvatar.value = null; error.value = ''; saved.value = false } }
+function setAvatar(value) {
+  if (!ready.value) return
+  if (!value) { draft.value.avatar_file_id = null; uploadedAvatar.value = null; return }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id || '')) { failure({ status: 400 }); return }
+  draft.value.avatar_file_id = value.id
+  uploadedAvatar.value = ['width', 'height', 'byte_size'].every(key => Number.isFinite(value[key]) && value[key] > 0)
+    ? { ...value, url: `/api/admin/files/${value.id}` } : null
+}
 function guardLeave(event) { if (dirty.value) { event.preventDefault(); event.returnValue = '' } }
 function revalidate() { if (ready.value) return load() }
 watch(dirty, value => { if (value) saved.value = false; emit('dirty-change', value) })
@@ -75,7 +87,8 @@ defineExpose({ dirty, clearDraft, revalidate })
         <label>介绍<textarea v-model="draft.introduction" aria-label="介绍" maxlength="20000" rows="7"></textarea></label>
         <label>技能（每行一项，最多30项）<textarea v-model="skillsText" aria-label="技能" rows="4"></textarea></label>
         <h3>头像</h3>
-        <ImageUpload :api="uploadApi" :model-value="avatar" @update:model-value="setAvatar" @unauthenticated="failure({ status: 401 })" />
+        <img v-if="avatar && !uploadedAvatar" class="profile-avatar" :src="avatar.url" alt="当前头像预览">
+        <ImageUpload :api="uploadApi" :model-value="uploadedAvatar" @update:model-value="setAvatar" @unauthenticated="failure({ status: 401 })" />
         <button v-if="draft.avatar_file_id" type="button" @click="setAvatar(null)">移除头像</button>
       </fieldset>
       <fieldset v-for="group in [{ key: 'contacts', label: '联系方式' }, { key: 'social_links', label: '社交链接' }]" :key="group.key" :disabled="loading || saving">
@@ -100,6 +113,7 @@ legend { font-weight: 600; padding: 0 8px; }
 label { display: grid; gap: 8px; margin-bottom: 16px; }
 input, textarea { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #dce2d3; border-radius: 6px; font: inherit; background: white; color: inherit; }
 textarea { resize: vertical; }
+.profile-avatar { display: block; max-width: 100%; max-height: 20rem; margin-bottom: 12px; border-radius: 8px; object-fit: contain; }
 button { min-height: 44px; padding: 8px 14px; border: 1px solid #dce2d3; border-radius: 6px; background: #f6f7f1; color: #3d6041; font: inherit; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 .profile-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
