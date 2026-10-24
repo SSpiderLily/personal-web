@@ -383,3 +383,27 @@
 
 
 归档条件：基本后台实施完成后，按 [production 统一归档规则](../../AGENTS.md#文档管理)执行。
+
+## 阶段 D 执行合同（2026-10-24）
+
+用户已授权按上述建议固定参数并并行执行；本节替代上节“助手草案/留正式执行”状态。Vue 3/FastAPI/psycopg保持，不新增运行依赖。四个独立目录已建立，C预览保持至D完成技术验证。集成方拥有共享入口、迁移、初始化、依赖、文档；三线仅修改归属模块和测试。普通分支本地集成已授权，main/push/生产不在范围。
+
+### 固定共用合同
+
+- 内容JSON最大262144字节；仅新内容端点使用`app.content_request.json_content(request)`，保留旧4096字节限制。拒绝额外字段、非有限数字、NUL/非法Unicode；错误沿用AdminRoute安全JSON。所有管理读写分别require_admin/require_admin_write，写前同源+CSRF；GET公开不需后台权限。
+- 新003迁移由集成方新增projects.category text默认空、features text[]默认空、cover_alt text默认空，以及content_bootstraps(key text主键,project_id bigint外键)；不改001/002。
+- 项目完整编辑对象字段：name(0..100)、summary(0..2000)、category(0..100)、tech_stack(最多20项，每项1..100)、features(最多30项，每项1..500)、cover_file_id(UUID或null)、cover_alt(0..500)、demo_url/source_url(null或最多2048)、blocks(最多100)、screenshots(最多30)。text块`{kind:'text',body:字符串}`最多10000字符，image块`{kind:'image',file_id:UUID,caption:字符串}`caption最多500；截图`{file_id:UUID,caption:字符串}`，同项目file_id不重复。数组次序即position，不收客户端块id/status/sort_order。普通链接仅绝对HTTP(S)，无用户名/密码/control或反斜杠；demo_url另允许精确`/trip/`，拒绝其他相对/双斜杠URL。
+- 已发布项目每次保存和发布必须非空name/summary、至少1个tech_stack、有效cover_file_id、至少1个非空text或有效image块；其余可空。草稿/下架允许缺项但不能非法格式/无效图片引用。事务锁项目行，图文/截图原子替换；所有图片必须存在。状态只由动作决定；下架仅published→archived，publish允许draft/archived→published；published再publish可幂等。对不存在id统一404 project_not_found，非法内容400 invalid_request，状态冲突409 project_conflict（统一中文消息，不回显输入）。并发排序锁项目集合，精确包含所有项目id且无重复，0起连续；新建与排序也共用事务锁避免遗漏。
+- 项目JSON读取包含上述字段及id正整数、status、sort_order、published_at、updated_at。图片对象不嵌入任意用户URL；组件按file_id生成私有或公开受控地址。公开列表`GET /api/projects`→`{projects:[完整对象]}`，详情`GET /api/projects/{id}`→`{project:完整对象}`，只published、按sort_order/id。管理GET/POST `/api/admin/projects`→`{projects:[...]}`/`{project:...}`，POST body完整编辑对象；GET/PUT `/api/admin/projects/{id}`→`{project:...}`，PUT完整编辑对象；POST `/{id}/publish`和`/{id}/archive` body `{}`；PUT `/api/admin/projects/order` body`{ids:[正整数...]}`→`{projects:[...]}`。order静态路由先于id。导出`projects.list_published(settings)`和`projects.get_published(settings,id)`，分别返回列表/对象，路由包装。资料兼容项目由集成方接入，资料线不依赖项目模块。
+- 管理组件api由集成方注入。ProjectsPanel api:`list(),get(id),create(value),save(id,value),publish(id),archive(id),reorder(ids),upload(file)`；ProfilePanel api:`load(),save(value),upload(file)`。不自行取CSRF/建第二会话。两组件emit unauthenticated；503/网络/焦点复核失败保留draft；退出或401清除。上传复用ImageUpload，使用其既有props合同。面板切换若未保存需显式提醒/确认，集成方负责保持实例或离开确认，不能静默卸载草稿。
+- 资料GET/PUT `/api/admin/profile`与公开GET `/api/profile`均直接返回资料对象，字段name(0..100)、title(0..200)、introduction(0..20000)、skills(最多30项每项1..100)、avatar_file_id(UUID/null)、contacts/social_links(各最多20项`{label:1..100,url:1..2048}`；contacts允许安全mailto/tel及HTTP(S)，social_links仅HTTP(S)，禁止凭据/control/反斜杠)。PUT精确这7字段；GET另含projects兼容列表。姓名/联系方式/头像可空，title/introduction建议保留但允许清空。资料为空时返回空name/title/introduction、[]skills/links和null头像，不回退虚构身份。导出`profile.load_profile(settings)`及`save_profile(payload,settings)`；响应projects暂[]，集成接published映射{name,description}。
+- 公开图片`GET /api/files/{uuid}`仅当前published项目封面/图片块/截图或site_profile头像；UUID非法、未引用/不存在均404 file_not_found。复用admin_uploads.load_image安全读取，保留私有接口。nosniff/no-store；授权与读取以同一数据库快照/事务保证确定请求时刻的权限，不承诺撤回已下载副本。共享引用存在仍允许；坏存储/未配置503；不能先读私有元数据泄露存在性。新增`file_publication.is_public_reference(conn,identifier)`供测试/组合，router由public_file_routes提供。
+- 公开ProjectContent组件props project、privateImages=false，用同一组件渲染内存草稿预览和公开详情；不写库/发统计。PublicProfile组件props profile，空字段不出现；不含独立项目列表。公开详情成功读取后派发DOM `CustomEvent('project-opened',{detail:{project_id:id}})`供7B接入，本阶段不发访问统计请求。/trip/按原VITE_TRIP_DEMO_URL/dev5173/production规则解析，其他安全链接保留。
+- 初始化由集成方提供显式development-only命令，事务+串行锁，固定bootstrap标记，同一事务写项目/资料/标记；先安全保存真实截图，无标记但已有用户内容则拒绝初始化；失败清理本次新建文件及元数据；幂等重复不覆盖。前台从API读取，空态/加载错误明确，禁止硬编码旧项目回退。正式开发库迁移及一次初始化只由集成方在技术验收后串行执行，保留账号/会话/工具/统计。
+
+### 三线实现与验证任务
+
+- [ ] D4 项目线：归属projects.py、project_routes.py、ProjectsPanel.vue、components/ProjectContent.vue、项目专属辅助文件和test_admin_projects*.py/frontend专属测试。先失败测试，覆盖发布/每次保存、无效引用/URL/上限、事务回滚/并发/排序/匿名过滤、内存预览和失败保留草稿；实现并提交，禁止改共享入口/迁移。
+- [ ] D5 资料线：归属profile.py、profile_routes.py、ProfilePanel.vue、components/PublicProfile.vue、资料专属辅助文件和test_admin_profile*.py/frontend专属测试。先失败测试，覆盖空身份、链接限制、头像引用/原子保存、旧字段兼容、重试保留；实现并提交，不修改main/App/AdminApp/adminApi/迁移。
+- [ ] D3B 图片线：归属file_publication.py、public_file_routes.py、test_admin_public_files*.py；先失败测试覆盖匿名/私有、草稿/发布/共享/下架/头像替换、越权与存储保护、回滚与跨连接一致；策略可用SQL构造临时引用先验，合入后再与4/5真实写入联合测试。不改admin_uploads底层，需求交集成方。
+- [ ] 集成方：统一新增003、content_request及其测试，接入口/api和管理API；保留当前展示样式接真实公开项目/资料并实现成功事件；显式初始内容命令及幂等/失败测试；统一99项原PG回归+三线专项、前端测试/构建、浏览器桌面/窄屏/发布全链路；每线独立审查后本地普通merge，整分支审查后才切真实开发预览。生产/推送/阶段E统计UI留后续。
