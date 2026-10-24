@@ -63,8 +63,10 @@ async function restoreSession() {
     }
   } catch (reason) {
     if (!alive) return
-    clearSession()
-    phase.value = 'unavailable'
+    if (!wasAuthenticated) {
+      clearSession()
+      phase.value = 'unavailable'
+    }
     failure(reason)
   } finally { if (alive) busy.value = false }
 }
@@ -174,7 +176,7 @@ onBeforeUnmount(() => {
         <div class="admin-demo-banner"><strong>后台已连接</strong><span>登录状态由服务端验证。业务模块将按后续阶段逐步接入。</span></div>
         <div v-if="error" class="admin-error-panel" role="alert">
           <p>{{ error }}</p>
-          <button type="button" :disabled="busy" @click="refreshOverview">重试</button>
+          <button type="button" :disabled="busy" @click="restoreSession">重试</button>
         </div>
         <section v-if="overviewReady" :aria-labelledby="'admin-module-title'" class="admin-module">
           <p class="admin-eyebrow">{{ current.index }} / WEBSITE MANAGEMENT</p>

@@ -3,19 +3,31 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
 import { AdminApiError } from '../src/admin/adminApi.js'
-import { parse, compileScript } from '@vue/compiler-sfc'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 
-function mountAdmin(api) {
+function mountAdmin(api, { render = false } = {}) {
   const source = readFileSync(new URL('../src/admin/AdminApp.vue', import.meta.url), 'utf8')
   const { descriptor } = parse(source)
-  const compiled = compileScript(descriptor, { id: 'admin-shell-test', inlineTemplate: false }).content
+  const script = compileScript(descriptor, { id: 'admin-shell-test', inlineTemplate: false })
+  const compiled = script.content
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace(/^import.*from.*adminApi.*$/gm, '')
-    .replace(/^import ToolsPanel.*$/gm, 'const ToolsPanel = {}')
+    .replace(/^import ToolsPanel.*$/gm, '')
     .replace('export default', 'return')
-  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', compiled)(Vue, () => api, AdminApiError)
-  const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null })
+  const childDescriptor = parse(readFileSync(new URL('../src/admin/ToolsPanel.vue', import.meta.url), 'utf8')).descriptor
+  const childCode = compileScript(childDescriptor, { id: 'admin-tools-test', inlineTemplate: true }).content
+    .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
+      'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
+    .replace('export default', 'return')
+  const ToolsPanel = new Function('Vue', childCode)(Vue)
+  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', 'ToolsPanel', compiled)(Vue, () => api, AdminApiError, ToolsPanel)
+  const template = compileTemplate({ source: descriptor.template.content, id: 'admin-shell-test', compilerOptions: { bindingMetadata: script.bindings } }).code
+    .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
+      'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
+    .replace('export function render', 'return function render')
+  component.render = new Function('Vue', template)(Vue)
+  const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, events: {}, addEventListener(name, handler) { this.events[name] = handler } })
   const renderer = Vue.createRenderer({
     createElement: element, createText: text => element('#text', text),
     createComment: text => element('#comment', text),
@@ -33,12 +45,12 @@ function mountAdmin(api) {
     nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1],
   })
   const root = element('root')
-  const app = renderer.createApp({ ...component, render: () => null }, { api })
+  const app = renderer.createApp(render ? component : { ...component, render: () => null }, { api })
   const instance = app.mount(root)
   const nodes = () => { const all = []; const visit = node => { all.push(node); node.children.forEach(visit) }; visit(root); return all }
   const text = () => nodes().map(node => node.text).join(' ')
   const find = (type, label) => nodes().find(node => node.type === type && (!label || node.text === label))
-  return { state: instance.$.setupState, unmount: () => app.unmount() }
+  return { state: instance.$.setupState, nodes, text, find, unmount: () => app.unmount() }
 }
 
 
@@ -186,14 +198,14 @@ test('protected content failure stays retryable without making up module data', 
       if (failed) throw new AdminApiError('admin_unavailable', 503)
       return overview
     },
-  }))
+  }), { render: true })
   try {
     await flush()
     assert.equal(page.state.phase, 'authenticated')
     assert.equal(page.state.overviewReady, false)
     assert.ok(page.state.error)
     failed = false
-    await page.state.refreshOverview()
+    await page.find('button', '重试').props.onClick()
     assert.equal(page.state.overviewReady, true)
     assert.equal(page.state.error, '')
   } finally { page.unmount() }
@@ -220,3 +232,124 @@ test('tools module adapter uses the live CSRF token and routes authentication lo
   page.state.moduleUnauthenticated(); assert.equal(page.state.phase,'anonymous'); assert.equal(page.state.session,null)
  } finally {page.unmount()}
 })
+
+const toolSettings = () => ({ tools: [...Array.from({ length: 9 }, (_, i) => ({ tool_key: `grid_0${i + 1}`, placement: 'grid', is_visible: true, sort_order: i })), { tool_key: 'dice', placement: 'floating', is_visible: true, sort_order: 0 }] })
+const diceCheckbox = page => page.nodes().find(node => node.props['aria-label'] === 'dice 显示')
+
+for (const reason of [new AdminApiError('network_error'), new AdminApiError('admin_unavailable', 503)]) {
+  test(`authenticated focus ${reason.code} and error-panel retry retain the real tools draft`, async () => {
+    const previousWindow = globalThis.window
+    const focusWindow = new EventTarget()
+    globalThis.window = focusWindow
+    let sessionResult = async () => authenticated, resolveRetry, suppliedCsrf
+    const page = mountAdmin(api({
+      session: () => sessionResult(),
+      tools: async () => toolSettings(),
+      saveTools: async (value, csrf) => { suppliedCsrf = csrf; return value },
+    }), { render: true })
+    try {
+      await flush()
+      await page.find('button', '小工具管理').props.onClick()
+      await flush()
+      const originalSession = page.state.session
+      const originalInput = diceCheckbox(page)
+      originalInput.checked = false
+      originalInput.events.change({ target: originalInput })
+      await Vue.nextTick()
+      assert.match(page.text(), /有未保存的更改/)
+      sessionResult = async () => { throw reason }
+      focusWindow.dispatchEvent(new Event('focus'))
+      await flush()
+      assert.ok(diceCheckbox(page) === originalInput, 'focus failure must retain the mounted editor')
+      assert.equal(originalInput.checked, false)
+      assert.equal(page.state.phase, 'authenticated')
+      assert.equal(page.state.session, originalSession)
+      assert.equal(page.state.overviewReady, true)
+      assert.match(page.text(), /有未保存的更改/)
+      assert.ok(page.state.error)
+
+      await page.find('button', '重试').props.onClick()
+      await flush()
+      assert.ok(diceCheckbox(page) === originalInput, 'failed retry must retain the mounted editor')
+      assert.equal(originalInput.checked, false)
+      assert.ok(page.state.error)
+
+      sessionResult = () => new Promise(resolve => { resolveRetry = resolve })
+      const retry = page.find('button', '重试').props.onClick()
+      await Vue.nextTick()
+      assert.ok(diceCheckbox(page) === originalInput, 'pending retry must retain the mounted editor')
+      assert.equal(typeof resolveRetry, 'function', 'retry must verify the session')
+      resolveRetry({ ...authenticated, csrf_token: 'b'.repeat(64) })
+      await retry
+      await flush()
+      assert.ok(diceCheckbox(page) === originalInput, 'successful retry must retain the mounted editor')
+      assert.equal(originalInput.checked, false)
+      assert.match(page.text(), /有未保存的更改/)
+      assert.equal(page.state.error, '')
+      await page.find('button', '保存设置').props.onClick()
+      await flush()
+      assert.equal(suppliedCsrf, 'b'.repeat(64))
+      assert.match(page.text(), /已保存/)
+    } finally {
+      page.unmount()
+      if (previousWindow === undefined) delete globalThis.window
+      else globalThis.window = previousWindow
+    }
+  })
+}
+
+for (const loss of ['anonymous', '401', 'unauthenticated']) {
+  test(`authenticated focus ${loss} still removes the real editor and clears the session`, async () => {
+    const previousWindow = globalThis.window
+    const focusWindow = new EventTarget()
+    globalThis.window = focusWindow
+    let expired = false
+    const page = mountAdmin(api({
+      session: async () => {
+        if (!expired) return authenticated
+        if (loss === 'anonymous') return anonymous
+        throw loss === '401' ? new AdminApiError('unexpected_response', 401) : new AdminApiError('unauthenticated')
+      },
+      tools: async () => toolSettings(),
+    }), { render: true })
+    try {
+      await flush()
+      await page.find('button', '小工具管理').props.onClick()
+      await flush()
+      assert.ok(diceCheckbox(page))
+      expired = true
+      focusWindow.dispatchEvent(new Event('focus'))
+      await flush()
+      assert.equal(diceCheckbox(page), undefined)
+      assert.equal(page.state.phase, 'anonymous')
+      assert.equal(page.state.session, null)
+      assert.equal(page.state.overviewReady, false)
+    } finally {
+      page.unmount()
+      if (previousWindow === undefined) delete globalThis.window
+      else globalThis.window = previousWindow
+    }
+  })
+}
+
+for (const reason of [new AdminApiError('network_error'), new AdminApiError('admin_unavailable', 503)]) {
+  test(`anonymous session refresh ${reason.code} still fails closed`, async () => {
+    let failed = false
+    const page = mountAdmin(api({ session: async () => {
+      if (failed) throw reason
+      return anonymous
+    } }))
+    try {
+      await flush()
+      assert.equal(page.state.phase, 'anonymous')
+      page.state.password = 'unsent password'
+      failed = true
+      await page.state.restoreSession()
+      assert.equal(page.state.phase, 'unavailable')
+      assert.equal(page.state.session, null)
+      assert.equal(page.state.overviewReady, false)
+      assert.equal(page.state.password, '')
+      assert.ok(page.state.error)
+    } finally { page.unmount() }
+  })
+}
