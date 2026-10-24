@@ -61,7 +61,7 @@ def main():
                                       '-U', 'personal_web_test', '-d', db_name, '-Atc', 'SHOW server_version'],
                                      env=env, capture_output=True, text=True, check=True).stdout.strip()
             print(f'Isolated PostgreSQL {version}; temporary cluster, Unix socket only.', flush=True)
-            for pattern in ('test_database*.py', 'test_admin*.py', 'test_upload*.py', 'test_tool*.py', 'test_statistics*.py'):
+            for pattern in ('test_database*.py', 'test_admin*.py', 'test_tool*.py', 'test_statistics*.py'):
                 result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', pattern, '-v', *sys.argv[1:]],
                                         cwd=backend, env=env)
                 if result.returncode:

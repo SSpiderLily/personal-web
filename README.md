@@ -1,6 +1,6 @@
 # 个人网站
 
-Vue 3 + Vite 展示个人信息、旅行助手项目和小工具占位，FastAPI 提供个人信息与骰子点数。公开业务接口仍使用现有数据；后台已接通单管理员真实登录、会话和受保护框架，业务编辑模块待后续接入。
+Vue 3 + Vite 展示个人信息、旅行助手项目和小工具占位，FastAPI 提供个人信息与骰子点数。后台已接通单管理员真实登录、会话和受保护框架；工具展示设置使用数据库，图片上传与统计基础接口已提供。项目和个人资料编辑、公开图片授权与真实访问事件待后续阶段接入。
 
 后台需求与进度见[后台计划](docs/admin-management-plan.md)；既有部署历史与未核实事项见[部署归档](docs/archive/2026-10-21-auto-deployment-plan.md)；测试与发布证据见[验证记录](docs/validation-log.md)。
 
@@ -50,7 +50,7 @@ uv run --locked python -c 'from app.settings import get_settings; s = get_settin
 
 test、production 模式完全忽略本地 `.env`。生产必须显式提供 DB_HOST、DB_PORT、DB_NAME、DB_USER、非空 DB_PASSWORD，且 DEBUG=false；缺失或非法值会阻止启动，错误文本不显示输入值。配置密码使用 SecretStr 包装，不在对象显示或配置 JSON 中输出；不要主动记录其原文或完整验证错误数据。
 
-现已提供 psycopg 连接与事务作用域：`app.database.connection()` 用于独立读取，`transaction()` 用于原子写入；正常退出提交，异常回滚，退出关闭连接。配置仅经 Settings/get_settings() 读取，非空的 libpq PG* 连接/会话环境覆盖会在建连前被拒绝，请清除这类变量并使用 DB_* 配置。模块导入不连接、不建隧道、不迁移；现有公开接口仍不访问数据库；管理会话与鉴权使用数据库。开发环境建连前需填写密码；test 模式只允许专用本地 personal_web_test_* 目标，不能使用默认开发库。
+现已提供 psycopg 连接与事务作用域：`app.database.connection()` 用于独立读取，`transaction()` 用于原子写入；正常退出提交，异常回滚，退出关闭连接。配置仅经 Settings/get_settings() 读取，非空的 libpq PG* 连接/会话环境覆盖会在建连前被拒绝，请清除这类变量并使用 DB_* 配置。模块导入不连接、不建隧道、不迁移；公开工具设置、管理会话及后台功能使用数据库；原健康、个人信息和骰子点数契约保留。开发环境建连前需填写密码；test 模式只允许专用本地 personal_web_test_* 目标，不能使用默认开发库。
 
 ## 开发库迁移
 
@@ -78,7 +78,7 @@ psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_E
 psql -X -W -h 127.0.0.1 -p 15432 -U personal_web_dev -d personal_web_dev -v ON_ERROR_STOP=1 -f backend/migrations/tests/verify_dev.sql
 ```
 
-验证入口自动回滚测试记录，不能单独运行其中的断言片段；它不是日常清库命令。SQL 迁移不自动创建真实管理员、个人资料或工具种子数据，也不接入应用数据库连接。`updated_at` 由后续后端写入时更新；详情块、截图交换位置的事务须先将对应唯一约束设为 DEFERRED，提交前会检查最终顺序唯一。正式接口仍须保证已发布内容每次保存的完整性、图文事务一致、图片鉴权及跨日访客标识稳定；行为边界见[后台计划](docs/admin-management-plan.md)。此入口不用于生产库。
+验证入口自动回滚测试记录，不能单独运行其中的断言片段；它不是日常清库命令。001不创建管理员或个人资料；002幂等补充九个工具占位及独立骰子的默认展示记录，不覆盖已有设置。管理员仍由终端单独初始化。`updated_at` 由后续后端写入时更新；详情块、截图交换位置的事务须先将对应唯一约束设为 DEFERRED，提交前会检查最终顺序唯一。正式接口仍须保证已发布内容每次保存的完整性、图文事务一致、图片鉴权及跨日访客标识稳定；行为边界见[后台计划](docs/admin-management-plan.md)。此入口不用于生产库。
 
 ## 开发环境管理员初始化
 
@@ -102,10 +102,20 @@ uv run --locked python -m app.admin_init
 
 - 个人信息：`backend/app/main.py`；页面与项目内容：`frontend/src/App.vue`；样式：`frontend/src/style.css`。公开作品仅旅行助手，不包含个人网站自身；个人信息加载失败仍可浏览项目并重试。
 - 项目：卡片可点击或按回车打开详情，支持 Esc、关闭按钮和遮罩关闭、恢复焦点及背景滚动。预览图 `frontend/src/assets/trip-preview.png` 来自旅行助手实际需求填写页，完整比例展示。
-- 小工具：`ToolGrid.vue` 目前仅九个占位图标；`DiceGame.vue` 是独立悬浮骰子，点数由 `POST /api/dice/roll` 生成，不保存数据。支持减少动态偏好、超时重试和 WebGL 不可用时的简化显示；动画与点数逻辑在 `frontend/src/dice/`。
+- 小工具：后台可保存九个占位工具的显示/排序和独立骰子的显示。公开首页从 `/api/tools` 读取；读取成功前不挂载骰子，失败显示重试，全部隐藏时显示空态。`ToolGrid.vue` 仍仅占位图标；`DiceGame.vue` 的点数由 `POST /api/dice/roll` 生成，不保存点数。支持减少动态偏好、超时重试和 WebGL 不可用时的简化显示；动画与点数逻辑在 `frontend/src/dice/`。
 - 健康与个人信息接口分别为 `GET /api/health`、`GET /api/profile`。后端接口定义和字段以代码为准。
 
-- 后台：访问 `/admin`，使用真实管理员账号登录。刷新恢复服务端会话，退出撤销会话；四个业务模块暂为待接入说明。开发和生产构建使用同一真实接口，生产管理接口须另行落实 HTTPS 配置。
+- 后台：访问 `/admin`，使用真实管理员账号登录。刷新恢复服务端会话，退出撤销会话；小工具管理可实际保存设置，其余业务页面仍待接入。开发和生产构建使用同一真实接口，生产管理接口须另行落实 HTTPS 配置。
+
+## 图片上传与统计基础
+
+更新到阶段C后先运行上方开发库迁移，002会补充默认工具设置；此操作不覆盖管理员、会话或已保存工具状态。工具配置不完整或数据库不可用时明确报错，不能用固定默认值重新展示已隐藏项。
+
+图片使用 `UPLOAD_DIR` 指定独立于worktree/release的绝对持久目录，在忽略的 `backend/.env` 中配置后重启开发后端，例如 `UPLOAD_DIR=/绝对路径/personal-web-data/development/uploads`。未配置时只有图片接口503，应用仍能启动。路径各级不允许符号链接，最终目录由应用用户持有且权限0700；首次合法上传自动创建目录，文件0600。macOS `/tmp` 是别名路径时应使用 `/private/tmp` 或规范化后的真实路径。生产路径和权限在8B另行落地，不直接复制开发路径。
+
+上传为 `POST /api/admin/files`，一个名为file的multipart文件；只接受1字节—10MiB、最多4000万像素的静态PNG/JPEG/WebP。客户端须提供当前会话的CSRF及共用请求保护，由浏览器自动设置FormData的Content-Type。成功返回图片id、元数据和受控读取地址；读取也须登录，3A阶段不向匿名公开图片。共用组件为 `frontend/src/admin/ImageUpload.vue`，项目/头像表单接入留后续阶段。上传目录不作为静态目录公开，代码回退不会自动恢复数据库或图片。
+
+统计基础提供受保护的 `GET /api/admin/statistics?days=7`（或30），按Asia/Shanghai自然日、含当天计算，整个区间独立去重。`POST /api/admin/visits` 是唯一允许匿名的统计写接口，仍检查精确Origin、JSON和共用请求头；该路径用于接收现有管理员Cookie并由服务端排除管理员。匿名标识固定一年有效期且跨日复用，不采集IP/UA指纹。公开页面尚未发送访问记录，统计界面和真实事件联调留7B；不能把接口已有数据称为真实流量验收。
 
 ## 检查与预览
 

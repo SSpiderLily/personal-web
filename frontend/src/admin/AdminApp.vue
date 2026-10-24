@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { createAdminApi, AdminApiError } from './adminApi.js'
-import ToolsPanel from './modules/ToolsPanel.vue'
+import ToolsPanel from './ToolsPanel.vue'
 
 const props = defineProps({ api: { type: Object, default: () => createAdminApi() } })
 const phase = ref('checking')

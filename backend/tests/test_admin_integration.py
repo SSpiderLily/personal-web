@@ -68,7 +68,8 @@ class AdminIntegrationTests(unittest.TestCase):
             overview = other.get('/api/admin/overview').json()
             self.assertEqual(overview['admin'], {'id': 1, 'username': 'owner'})
             self.assertEqual([m['id'] for m in overview['modules']], ['projects', 'statistics', 'content', 'tools'])
-            self.assertTrue(all(m['status'] == 'pending' for m in overview['modules']))
+            self.assertEqual({m['id']:m['status'] for m in overview['modules']},
+                             {'projects':'pending','statistics':'pending','content':'pending','tools':'ready'})
 
     def test_wrong_username_and_password_have_same_generic_error(self):
         errors = [self.login(username='missing').json(), self.login(password='wrong').json()]
