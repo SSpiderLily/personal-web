@@ -2,7 +2,7 @@
 
 目标：解决个人网站没有管理后台的问题；第一版只做后台框架和基本功能。
 
-状态（2026-10-24）：阶段 A 三条线已实现并合入本地 codex/admin-phase-a。任务 1 数据库基础完成技术验收，任务 2 的2A/2B已完成技术验证及用户开发环境验收，八项完整任务计 2/8；阶段 C 已进入准备，尚未实现；8A 部署方案已交付并审查，建议参数待接受、8B 未实施。统一检查、隔离数据库专项及开发库驱动只读冒烟通过，证据见[验证记录](validation-log.md)。本轮未推送、未合并 main、未部署；上次已验证的生产版本为 f01d1fe；本轮未访问或修改生产。
+状态（2026-10-24）：阶段 A 三条线已实现并合入本地 codex/admin-phase-a。任务 1 数据库基础完成技术验收，任务 2 的2A/2B已完成技术验证及用户开发环境验收，八项完整任务计 2/8；阶段 C 已获授权并行实施，进行中；8A 部署方案已交付并审查，建议参数待接受、8B 未实施。统一检查、隔离数据库专项及开发库驱动只读冒烟通过，证据见[验证记录](validation-log.md)。本轮未推送、未合并 main、未部署；上次已验证的生产版本为 f01d1fe；本轮未访问或修改生产。
 
 ## 已确认需求
 
@@ -271,7 +271,7 @@
 
 ## 阶段 C：并行执行准备（2026-10-24）
 
-目标：在已验收的真实登录基线上准备3A图片上传、6工具展示设置、7A统计基础三条线；本轮仅关闭阶段B并准备Git基线与分工，不编写阶段C业务代码、不安装新依赖、不访问生产。仍使用本文件作为唯一计划，技术证据见验证记录。
+目标：在已验收的真实登录基线上实施3A图片上传、6工具展示设置、7A统计基础三条线。用户已授权按建议固定接口/参数、建立独立目录并并行执行；2026-10-24准备限制已由本次授权替代，仍不推送、不合并main、不访问生产。仍使用本文件作为唯一计划，技术证据见验证记录。
 
 ### 基线与职责
 
@@ -299,6 +299,43 @@
 2. 各线完成对应失败测试、实现、隔离验证与本地提交；先合工具设置，再合上传与统计模块，集成方统一接入口。必要迁移只串行执行，不能覆盖已初始化管理员和会话。
 3. 集成后运行统一检查、扩充后的数据库专项及浏览器验收；重测真实登录/退出、匿名管理请求401、公开首页、详情和骰子。独立审查通过后分别记录技术完成、用户验收及Git状态。上传公开权限和真实访问事件仍按3B/7B交付，不以阶段C通过代替。
 4. 本地实现不包含推送、合并main或生产发布。整体后台计划尚未完成，不归档；后续完成全部实施后按统一归档规则处理。
+
+
+## 阶段 C：固定契约与实施授权（2026-10-24）
+
+用户确认按上一节建议固定并执行。以下替代上一节的参数草案、未来式目录描述及Cookie交接待定项；是三条工作线的共同合同。实际目录已建立在原项目 `.worktrees/` 下，集成方独占入口，日常阶段B预览保持。
+
+### 3A 图片上传合同
+
+- 接口：`POST /api/admin/files`，multipart仅一个名为`file`的文件，无其他字段；201返回`{id,media_type,byte_size,width,height,url}`，url固定为`/api/admin/files/{uuid}`。`GET /api/admin/files/{uuid}`需真实管理员登录，阶段3A匿名一律401，已知id不存在404；公开引用授权留3B。
+- 静态PNG/JPEG/WebP，原文件1—10,485,760字节，最大40,000,000像素；拒绝动图、多帧、SVG、损坏/截断图和伪装扩展/MIME，以完整解码后的实际格式为准。扩展名不用于存储寻址。上传请求总字节上限10MiB+64KiB，未授权请求在读取文件前拒绝，chunked请求同样有界。
+- `UPLOAD_DIR`为可选绝对路径配置；未配置时仅上传/读取接口503，不阻断公开接口或应用启动。目录在首次合法上传时建立；test必须用自有临时目录，production不可放在当前release代码树内。开发联调使用独立于worktree的专用持久目录，路径由集成方在启动时显式注入，不创建生产目录。
+- 服务端UUID生成存储键，原名仅作元数据；校验目录/文件权限与路径、拒绝越界或符号链接。文件先安全落盘，再事务写元数据，失败清理本次文件；不承诺崩溃时跨文件系统/数据库原子提交，遗留孤文件永不通过无元数据的读取接口公开。读取带`nosniff`和`Cache-Control: no-store`，不挂载静态目录。
+- 上传专用鉴权新增`require_admin_upload`：精确可信Origin、X-Admin-Request=1、真实会话、绑定CSRF、multipart Content-Type；原JSON写保护不放宽。读写路由复用AdminRoute的安全错误外壳，错误`{error:{code,message}}`；413=`file_too_large`，415=`unsupported_image`，400=`invalid_image`或`invalid_request`，404=`file_not_found`，存储故障503=`upload_unavailable`，不回显路径/密码/输入。
+- 3A工作线被明确授权独占修改`admin_auth.py`上传专用保护、`settings.py`的upload_dir、后端Pillow/python-multipart依赖与锁文件及相关测试；其他线和集成方在其交付前不改这些文件。图片组件`ImageUpload.vue` props为`api`（`upload(file):Promise<metadata>`）、`modelValue`（metadata或null）；成功发`update:modelValue`，失败保留旧值，401发`unauthenticated`，不持有CSRF或登录凭据，不提供业务保存表单。
+
+### 6 工具设置合同
+
+- 注册表固定`grid_01`到`grid_09`（placement=grid）和`dice`（placement=floating）；默认全部展示，grid顺序0—8、dice顺序0。九个仍为原占位工具，不开发新工具。`002_tool_defaults.sql`仅幂等补缺失默认行，不覆盖已有设置；初始001不可修改，云开发库迁移由集成方验收后串行运行。
+- `GET /api/tools`公开，`GET /api/admin/tools`受保护，均200返回`{tools:[{tool_key,placement,is_visible,sort_order}]}`的完整10项；`PUT /api/admin/tools`需JSON写保护和CSRF，接收同结构，完整集合验证后单事务保存并返回规范排序结果。拒绝缺失/未知/重复键、变更placement、非布尔显示值、非整数或重复/越界顺序（grid必须0—8全排列，dice必须0），失败原值不变。错误沿用安全统一格式，数据库或不完整配置503，不用默认值掩盖失败。
+- 工作线拥有`tool_settings.py`、`tool_routes.py`、002迁移及受其影响的旧数据库迁移断言测试；独占`ToolGrid.vue`改为接收已排序可见工具items，每项含tool_key，图标按稳定key映射，不能按排序位置换图标；`ToolsPanel.vue` props api=`{load(),save(payload)}`，401发`unauthenticated`，错误保留草稿，成功更新基准。App.vue骰子条件和后台入口由集成方统一接入。
+
+### 7A 访问统计合同
+
+- 时区Asia/Shanghai，days只允许整数7或30，含当天自然日，start=today-(days-1)，end=today；跨日匿名标识保持。`personal_web_visitor`为UUID随机标识，HttpOnly、SameSite=Strict、host-only、Path=/api/admin/visits、固定Max-Age=31,536,000秒，production Secure。合法Cookie不续期，缺失或非法时首次记录生成；不存IP/UA指纹、不自动删除历史数据。
+- 记录入口固定`POST /api/admin/visits`：这是唯一明确允许匿名的统计写入口，放在该路径以接收现有Path=/api/admin管理员Cookie，不扩大登录Cookie范围。仍需精确可信Origin、X-Admin-Request=1和JSON。body严格为`{kind:"website"}`或`{kind:"project",project_id:正整数}`；不接受客户端admin/preview/time/visitor_id标记。有效管理员会话直接200`{recorded:false}`，不设置访客Cookie、不写记录；匿名记录使用Cookie标识和服务端日期。project仅对已发布项目入库，无效/草稿/下架项目统一recorded=false，网站与项目记录互相独立。同日重复/并发依赖主键ON CONFLICT DO NOTHING，成功可接受记录返回recorded=true。该入口不接入前台，真实事件留7B；管理员预览不发送记录，未来入口仍须复用服务端会话排除。
+- `GET /api/admin/statistics?days=7|30`需真实管理员登录，200返回`{days,timezone,start_date,end_date,website_visitors,projects:[{project_id,name,visitors}]}`；网站/各项目按整个区间COUNT(DISTINCT visitor_id)，项目列表包含现存项目以保留已下架项目的历史，不向匿名提供统计读取。查询拒绝非法区间，日期只取服务端，不接受客户端回填。
+- 工作线拥有`visitors.py`、`statistics.py`、`statistics_routes.py`及测试；独立测试路由实例接入AdminRoute/现有依赖即可，不改main.py。只实现基础服务与可验证路由，后台统计UI及公开页面事件由7B完成，不能冒称真实访问联调完成。
+
+### 共用集成与执行步骤
+
+集成方负责main.py路由、AdminApp.vue模块挂载、adminApi.js的tools/saveTools（save接收payload和csrf）及uploadFile方法（使用FormData并由浏览器设置Content-Type）、公开tools读取、App.vue条件挂载、脚本测试入口、README/计划/日志/INDEX。三线使用同一冻结合同提交为起点，各目录独立安装依赖且不复制开发凭据，不启动开发隧道、不访问共享开发库或生产；真实SQL只用临时PG。
+
+- [ ] 三条线各先写失败测试，确认红灯后实现，运行模块测试与隔离PG，并本地提交和报告；接口安全、错误不泄密、回滚/并发均按本节验收。
+- [ ] 集成方按工具、上传、统计顺序普通merge，本地接入口，固定迁移只串行执行；前端工具设置和公开显示需浏览器真实链路，图片上传/读取需临时库和临时目录验证，统计不注入真实访客数据。
+- [ ] 独立任务审查、修复与限定复查通过后运行统一检查、扩充PG专项、浏览器桌面/窄屏及公开骰子/详情回归；完成整分支审查后记录技术与用户验收边界，保留分支等待后续，不推送或部署。
+
+实现参考：[FastAPI文件上传](https://fastapi.tiangolo.com/tutorial/request-files/)、[Pillow图片解码与尺寸边界](https://pillow.readthedocs.io/en/stable/reference/Image.html)。
 
 
 归档条件：基本后台实施完成后，按 [production 统一归档规则](../../AGENTS.md#文档管理)执行。
