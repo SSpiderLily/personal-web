@@ -43,3 +43,13 @@ class BootstrapTests(unittest.TestCase):
             for table in ('projects','uploaded_files','site_profile','content_bootstraps'):
                 self.assertEqual(conn.execute('SELECT count(*) FROM '+table).fetchone(),(0,))
         self.assertEqual(list(self.root.iterdir()),[])
+
+    def test_concurrent_initialization_is_one_transactional_bootstrap(self):
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ids=list(pool.map(lambda _:bootstrap(self.settings),range(2)))
+        self.assertEqual(ids[0],ids[1])
+        with database.connection() as conn:
+            for table in ('projects','uploaded_files','site_profile','content_bootstraps'):
+                self.assertEqual(conn.execute('SELECT count(*) FROM '+table).fetchone(),(1,))
+        self.assertEqual(len(list(self.root.iterdir())),1)

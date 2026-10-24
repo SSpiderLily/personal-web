@@ -2,6 +2,8 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { createAdminApi, AdminApiError } from './adminApi.js'
 import ToolsPanel from './ToolsPanel.vue'
+import ProjectsPanel from './ProjectsPanel.vue'
+import ProfilePanel from './ProfilePanel.vue'
 
 const props = defineProps({ api: { type: Object, default: () => createAdminApi() } })
 const phase = ref('checking')
@@ -12,10 +14,24 @@ const busy = ref(false)
 const error = ref('')
 const overviewReady = ref(false)
 const selected = ref('projects')
+const visited = ref(new Set(['projects']))
 let alive = true
 const toolModuleApi = {
   load: () => props.api.tools(),
   save: value => props.api.saveTools(value, session.value?.csrf_token),
+}
+const projectModuleApi = {
+  list: () => props.api.projects(), get: id => props.api.project(id),
+  create: value => props.api.createProject(value, session.value?.csrf_token),
+  save: (id, value) => props.api.saveProject(id, value, session.value?.csrf_token),
+  publish: id => props.api.publishProject(id, session.value?.csrf_token),
+  archive: id => props.api.archiveProject(id, session.value?.csrf_token),
+  reorder: ids => props.api.reorderProjects(ids, session.value?.csrf_token),
+  upload: file => props.api.uploadFile(file, session.value?.csrf_token),
+}
+const profileModuleApi = {
+  load: () => props.api.profile(), save: value => props.api.saveProfile(value, session.value?.csrf_token),
+  upload: file => props.api.uploadFile(file, session.value?.csrf_token),
 }
 function moduleUnauthenticated() { failure(new AdminApiError('unauthenticated', 401)) }
 const modules = [
@@ -30,6 +46,7 @@ function clearSession({ preservePassword = false } = {}) {
   if (!preservePassword) password.value = ''
   overviewReady.value = false
   selected.value = 'projects'
+  visited.value = new Set(['projects'])
   phase.value = 'anonymous'
 }
 function failure(reason) {
@@ -38,7 +55,6 @@ function failure(reason) {
   error.value = reason instanceof AdminApiError ? reason.message : '后台暂时不可用，请稍后重试。'
 }
 async function readOverview() {
-  overviewReady.value = false
   try {
     await props.api.overview()
     if (alive) overviewReady.value = true
@@ -103,6 +119,7 @@ async function refreshOverview() {
 }
 async function selectModule(id) {
   if (busy.value || !modules.some(module => module.id === id)) return
+  visited.value = new Set([...visited.value, id])
   selected.value = id
   await refreshOverview()
 }
@@ -173,7 +190,7 @@ onBeforeUnmount(() => {
         </div>
       </aside>
       <main class="admin-content" :aria-busy="busy">
-        <div class="admin-demo-banner"><strong>后台已连接</strong><span>登录状态由服务端验证。业务模块将按后续阶段逐步接入。</span></div>
+        <div class="admin-demo-banner"><strong>后台已连接</strong><span>项目、网站内容与小工具使用真实接口。切换模块会保留尚未保存的编辑。</span></div>
         <div v-if="error" class="admin-error-panel" role="alert">
           <p>{{ error }}</p>
           <button type="button" :disabled="busy" @click="restoreSession">重试</button>
@@ -182,15 +199,17 @@ onBeforeUnmount(() => {
           <p class="admin-eyebrow">{{ current.index }} / WEBSITE MANAGEMENT</p>
           <h1 id="admin-module-title">{{ current.label }}</h1>
           <p class="admin-module-description">{{ current.description }}</p>
-          <ToolsPanel v-if="selected === 'tools'" :api="toolModuleApi" @unauthenticated="moduleUnauthenticated" />
-          <div v-else class="admin-pending">
+          <ProjectsPanel v-if="visited.has('projects')" v-show="selected === 'projects'" :api="projectModuleApi" @unauthenticated="moduleUnauthenticated" />
+          <ProfilePanel v-if="visited.has('content')" v-show="selected === 'content'" :api="profileModuleApi" @unauthenticated="moduleUnauthenticated" />
+          <ToolsPanel v-if="visited.has('tools')" v-show="selected === 'tools'" :api="toolModuleApi" @unauthenticated="moduleUnauthenticated" />
+          <div v-if="selected === 'statistics'" class="admin-pending">
             <div class="admin-pending-mark" aria-hidden="true">＋</div>
             <p class="admin-badge">尚未接入</p>
             <h2>这里将用于{{ current.label }}</h2>
             <p>{{ current.scope }}</p>
             <p class="admin-muted">{{ current.dependency }}</p>
           </div>
-          <p v-if="selected !== 'tools'" class="admin-module-note">此模块尚未提供编辑和保存操作；小工具管理已接入真实设置。</p>
+          <p v-if="selected === 'statistics'" class="admin-module-note">统计基础接口已就绪，统计界面与真实访问事件将在下一阶段接入。</p>
         </section>
         <p v-else-if="!error" class="admin-muted" role="status">正在读取后台入口…</p>
       </main>

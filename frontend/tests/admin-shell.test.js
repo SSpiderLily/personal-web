@@ -13,7 +13,7 @@ function mountAdmin(api, { render = false } = {}) {
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace(/^import.*from.*adminApi.*$/gm, '')
-    .replace(/^import ToolsPanel.*$/gm, '')
+    .replace(/^import (ToolsPanel|ProjectsPanel|ProfilePanel).*$/gm, '')
     .replace('export default', 'return')
   const childDescriptor = parse(readFileSync(new URL('../src/admin/ToolsPanel.vue', import.meta.url), 'utf8')).descriptor
   const childCode = compileScript(childDescriptor, { id: 'admin-tools-test', inlineTemplate: true }).content
@@ -21,13 +21,15 @@ function mountAdmin(api, { render = false } = {}) {
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace('export default', 'return')
   const ToolsPanel = new Function('Vue', childCode)(Vue)
-  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', 'ToolsPanel', compiled)(Vue, () => api, AdminApiError, ToolsPanel)
+  const ProjectsPanel = Vue.defineComponent({setup(){ const value=Vue.ref('');return()=>Vue.h('input',{value:value.value,onInput:e=>value.value=e.target.value},'module-draft') }})
+  const ProfilePanel = Vue.defineComponent({setup(){return()=>Vue.h('p','profile module')}})
+  const component = new Function('Vue', 'createAdminApi', 'AdminApiError', 'ToolsPanel', 'ProjectsPanel', 'ProfilePanel', compiled)(Vue, () => api, AdminApiError, ToolsPanel, ProjectsPanel, ProfilePanel)
   const template = compileTemplate({ source: descriptor.template.content, id: 'admin-shell-test', compilerOptions: { bindingMetadata: script.bindings } }).code
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace('export function render', 'return function render')
   component.render = new Function('Vue', template)(Vue)
-  const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, events: {}, addEventListener(name, handler) { this.events[name] = handler } })
+  const element = (type, text = '') => ({ type, text, style: {}, props: {}, children: [], parent: null, events: {}, addEventListener(name, handler) { this.events[name] = handler } })
   const renderer = Vue.createRenderer({
     createElement: element, createText: text => element('#text', text),
     createComment: text => element('#comment', text),
@@ -353,3 +355,19 @@ for (const reason of [new AdminApiError('network_error'), new AdminApiError('adm
     } finally { page.unmount() }
   })
 }
+
+test('module switching and failed overview refresh preserve mounted content draft', async () => {
+  let fail = false
+  const page = mountAdmin(api({session:async()=>authenticated,overview:async()=>{if(fail)throw new AdminApiError('network_error');return overview}}),{render:true})
+  try {
+    await flush()
+    const draft=page.find('input','module-draft')
+    assert.ok(draft,'projects child should be mounted')
+    draft.props.onInput({target:{value:'未保存的内容'}})
+    await page.state.selectModule('content');await flush()
+    await page.state.selectModule('projects');await flush()
+    assert.equal(page.find('input','module-draft').props.value,'未保存的内容')
+    fail=true;await page.state.refreshOverview();await flush()
+    assert.equal(page.find('input','module-draft').props.value,'未保存的内容')
+  } finally {page.unmount()}
+})

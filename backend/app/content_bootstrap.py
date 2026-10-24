@@ -52,6 +52,7 @@ def bootstrap(settings):
                 raise BootstrapError('Database identity mismatch; refusing initialization')
             conn.execute("SET LOCAL lock_timeout='5s'")
             conn.execute('SELECT pg_advisory_xact_lock(%s)',(LOCK,))
+            conn.execute('SELECT pg_advisory_xact_lock(194521, 5)')
             previous=conn.execute('SELECT project_id FROM content_bootstraps WHERE key=%s',(KEY,)).fetchone()
             if previous: return previous[0]
             if conn.execute('SELECT EXISTS(SELECT 1 FROM projects) OR EXISTS(SELECT 1 FROM site_profile)').fetchone()[0]:

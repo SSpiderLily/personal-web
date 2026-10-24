@@ -95,5 +95,5 @@ async def logout(request: Request, current: auth.AdminSession = Depends(auth.req
 @router.get('/overview')
 def overview(current: auth.AdminSession = Depends(auth.require_admin)):
     return {'admin': current.admin, 'modules': [
-        {'id': key, 'label': label, 'status': 'ready' if key == 'tools' else 'pending'}
+        {'id': key, 'label': label, 'status': 'ready' if key in {'projects', 'content', 'tools'} else 'pending'}
         for key, label in (('projects', '项目管理'), ('statistics', '访问统计'), ('content', '网站内容'), ('tools', '小工具管理'))]}
