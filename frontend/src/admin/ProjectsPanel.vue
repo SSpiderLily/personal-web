@@ -14,6 +14,13 @@ const selectedStatus = ref('draft')
 const pendingSelection = ref(undefined)
 const loading = ref(false)
 const busy = ref(false)
+const uploading = ref(0)
+const blocked = computed(() => busy.value || loading.value || uploading.value > 0)
+const uploadApi = { upload: async file => {
+  uploading.value++
+  try { return await props.api.upload(file) }
+  finally { uploading.value-- }
+} }
 const ready = ref(false)
 const preview = ref(false)
 const error = ref('')
@@ -50,14 +57,14 @@ function accept(value) {
   else projects.value[index] = item
 }
 async function load() {
-  if (loading.value || busy.value) return
+  if (blocked.value) return
   loading.value = true; error.value = ''
   try { projects.value = parseList(await props.api.list()); ready.value = true }
   catch (reason) { failure(reason) }
   finally { loading.value = false }
 }
 async function openProject(id) {
-  if (loading.value || busy.value) return
+  if (blocked.value) return
   error.value = ''; notice.value = ''; preview.value = false
   if (id === null) { draft.value = emptyProject(); baseline.value = null; selectedId.value = null; selectedStatus.value = 'draft'; return }
   loading.value = true
@@ -66,7 +73,7 @@ async function openProject(id) {
   finally { loading.value = false }
 }
 async function selectProject(id) {
-  if (busy.value || loading.value) return
+  if (blocked.value) return
   if (draft.value && dirty.value) { pendingSelection.value = id; return }
   await openProject(id)
 }
@@ -75,7 +82,7 @@ async function confirmSelection() {
   if (id !== undefined) await openProject(id)
 }
 async function save() {
-  if (!draft.value || loading.value || busy.value) return
+  if (!draft.value || blocked.value) return
   busy.value = true; error.value = ''; notice.value = ''
   const value = editableProject(draft.value)
   value.tech_stack = lines(value.tech_stack.join('\n')); value.features = lines(value.features.join('\n'))
@@ -86,21 +93,21 @@ async function save() {
   finally { busy.value = false }
 }
 async function publish() {
-  if (!draft.value || selectedId.value === null || dirty.value || busy.value || loading.value) return
+  if (!draft.value || selectedId.value === null || dirty.value || blocked.value) return
   busy.value = true; error.value = ''; notice.value = ''
   try { accept(await props.api.publish(selectedId.value)); notice.value = '项目已发布。' }
   catch (reason) { failure(reason) }
   finally { busy.value = false }
 }
 async function archive() {
-  if (selectedStatus.value !== 'published' || dirty.value || busy.value || loading.value) return
+  if (selectedStatus.value !== 'published' || dirty.value || blocked.value) return
   busy.value = true; error.value = ''; notice.value = ''
   try { accept(await props.api.archive(selectedId.value)); notice.value = '项目已下架。' }
   catch (reason) { failure(reason) }
   finally { busy.value = false }
 }
 async function moveProject(id, offset) {
-  if (busy.value || loading.value) return
+  if (blocked.value) return
   const ids = projects.value.map(item => item.id), from = ids.indexOf(id), to = from + offset
   if (from < 0 || to < 0 || to >= ids.length) return
   ;[ids[from], ids[to]] = [ids[to], ids[from]]
@@ -111,7 +118,7 @@ async function moveProject(id, offset) {
 }
 function moveItem(items, index, offset) {
   const target = index + offset
-  if (busy.value || target < 0 || target >= items.length) return
+  if (blocked.value || target < 0 || target >= items.length) return
   ;[items[index], items[target]] = [items[target], items[index]]
 }
 function addText() { if (draft.value && draft.value.blocks.length < 100) draft.value.blocks.push({ kind: 'text', body: '' }) }
@@ -123,24 +130,24 @@ function addImage(image, target) {
   items.push({ ...(target === 'blocks' ? { kind: 'image' } : {}), file_id: image.id, caption: '' })
 }
 function setCover(image) { if (draft.value && projectImageUrl(image?.id)) draft.value.cover_file_id = image.id }
-function reset() { if (!busy.value) { draft.value = baseline.value ? editableProject(baseline.value) : emptyProject(); error.value = ''; notice.value = '' } }
+function reset() { if (!blocked.value) { draft.value = baseline.value ? editableProject(baseline.value) : emptyProject(); error.value = ''; notice.value = '' } }
 defineExpose({ dirty, clear })
 onMounted(load)
 </script>
 
 <template>
-  <section class="projects-panel" aria-label="项目管理" :aria-busy="busy || loading">
+  <section class="projects-panel" aria-label="项目管理" :aria-busy="blocked">
     <p class="intro">先保存草稿，再预览和发布。已发布项目保存成功后立即更新公开内容。</p>
     <p v-if="loading" role="status">正在加载项目…</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
-    <div class="list-actions"><button :disabled="busy || loading" @click="selectProject(null)">新增项目</button><button :disabled="busy || loading" @click="load">重新加载列表</button></div>
+    <div class="list-actions"><button :disabled="blocked" @click="selectProject(null)">新增项目</button><button :disabled="blocked" @click="load">重新加载列表</button></div>
     <p v-if="ready && !projects.length">暂无项目。新增并发布后会在首页展示。</p>
     <ul class="project-list">
       <li v-for="(item, index) in projects" :key="item.id">
-        <button class="project-select" :aria-pressed="selectedId === item.id" :disabled="busy || loading" @click="selectProject(item.id)">{{ item.name || '未命名项目' }} · {{ labels[item.status] }}</button>
-        <button :aria-label="`${item.name || '项目'} 上移`" :disabled="busy || loading || index === 0" @click="moveProject(item.id, -1)">上移</button>
-        <button :aria-label="`${item.name || '项目'} 下移`" :disabled="busy || loading || index === projects.length - 1" @click="moveProject(item.id, 1)">下移</button>
+        <button class="project-select" :aria-pressed="selectedId === item.id" :disabled="blocked" @click="selectProject(item.id)">{{ item.name || '未命名项目' }} · {{ labels[item.status] }}</button>
+        <button :aria-label="`${item.name || '项目'} 上移`" :disabled="blocked || index === 0" @click="moveProject(item.id, -1)">上移</button>
+        <button :aria-label="`${item.name || '项目'} 下移`" :disabled="blocked || index === projects.length - 1" @click="moveProject(item.id, 1)">下移</button>
       </li>
     </ul>
     <div v-if="pendingSelection !== undefined" role="alertdialog" aria-label="未保存更改" class="discard-prompt">
@@ -150,7 +157,7 @@ onMounted(load)
     <template v-if="draft">
       <div class="editor-heading"><h3>{{ selectedId ? '编辑项目' : '新建草稿' }} · {{ labels[selectedStatus] }}</h3><span v-if="dirty">有未保存的更改</span></div>
       <form @submit.prevent="save">
-        <fieldset :disabled="busy || loading">
+        <fieldset :disabled="blocked">
           <legend>基本信息</legend>
           <label>项目名称<input v-model="draft.name" maxlength="100"></label>
           <label>项目简介<textarea v-model="draft.summary" maxlength="2000" rows="3"></textarea></label>
@@ -160,36 +167,36 @@ onMounted(load)
           <label>在线体验链接<input :value="draft.demo_url || ''" maxlength="2048" placeholder="https://… 或 /trip/" @input="draft.demo_url = $event.target.value || null"></label>
           <label>源码链接<input :value="draft.source_url || ''" maxlength="2048" placeholder="https://…" @input="draft.source_url = $event.target.value || null"></label>
         </fieldset>
-        <fieldset :disabled="busy || loading"><legend>封面</legend>
+        <fieldset :disabled="blocked"><legend>封面</legend>
           <img v-if="draft.cover_file_id" class="cover-preview" :src="projectImageUrl(draft.cover_file_id, true)" :alt="draft.cover_alt || '封面预览'">
-          <ImageUpload :api="api" @update:model-value="setCover" @unauthenticated="failure({ status: 401 })" />
+          <ImageUpload :api="uploadApi" @update:model-value="setCover" @unauthenticated="failure({ status: 401 })" />
           <label>封面替代文字<input v-model="draft.cover_alt" maxlength="500"></label>
           <button v-if="draft.cover_file_id" type="button" @click="draft.cover_file_id = null">移除封面</button>
         </fieldset>
-        <fieldset :disabled="busy || loading"><legend>图文详情（最多100块）</legend>
+        <fieldset :disabled="blocked"><legend>图文详情（最多100块）</legend>
           <div v-for="(block, index) in draft.blocks" :key="index" class="content-item">
             <label v-if="block.kind === 'text'">文本块 {{ index + 1 }}<textarea v-model="block.body" maxlength="10000" rows="5"></textarea></label>
             <template v-else><img :src="projectImageUrl(block.file_id, true)" alt="详情图片预览"><label>图片说明<input v-model="block.caption" maxlength="500"></label>
-              <ImageUpload :api="api" @update:model-value="block.file_id = $event.id" @unauthenticated="failure({ status: 401 })" />
+              <ImageUpload :api="uploadApi" @update:model-value="block.file_id = $event.id" @unauthenticated="failure({ status: 401 })" />
             </template>
             <div class="item-actions"><button type="button" :disabled="index === 0" @click="moveItem(draft.blocks, index, -1)">上移</button><button type="button" :disabled="index === draft.blocks.length - 1" @click="moveItem(draft.blocks, index, 1)">下移</button><button type="button" @click="draft.blocks.splice(index, 1)">删除块</button></div>
           </div>
           <button type="button" :disabled="draft.blocks.length >= 100" @click="addText">添加文本块</button>
-          <p>添加图片块：</p><ImageUpload v-if="draft.blocks.length < 100" :api="api" @update:model-value="addImage($event, 'blocks')" @unauthenticated="failure({ status: 401 })" />
+          <p>添加图片块：</p><ImageUpload v-if="draft.blocks.length < 100" :api="uploadApi" @update:model-value="addImage($event, 'blocks')" @unauthenticated="failure({ status: 401 })" />
         </fieldset>
-        <fieldset :disabled="busy || loading"><legend>项目截图（最多30张）</legend>
+        <fieldset :disabled="blocked"><legend>项目截图（最多30张）</legend>
           <div v-for="(shot, index) in draft.screenshots" :key="shot.file_id" class="content-item">
             <img :src="projectImageUrl(shot.file_id, true)" alt="截图预览"><label>截图说明<input v-model="shot.caption" maxlength="500"></label>
             <div class="item-actions"><button type="button" :disabled="index === 0" @click="moveItem(draft.screenshots, index, -1)">上移</button><button type="button" :disabled="index === draft.screenshots.length - 1" @click="moveItem(draft.screenshots, index, 1)">下移</button><button type="button" @click="draft.screenshots.splice(index, 1)">删除截图</button></div>
           </div>
-          <ImageUpload v-if="draft.screenshots.length < 30" :api="api" @update:model-value="addImage($event, 'screenshots')" @unauthenticated="failure({ status: 401 })" />
+          <ImageUpload v-if="draft.screenshots.length < 30" :api="uploadApi" @update:model-value="addImage($event, 'screenshots')" @unauthenticated="failure({ status: 401 })" />
         </fieldset>
         <div class="editor-actions">
-          <button type="submit" :disabled="busy || loading || !dirty">{{ busy ? '正在处理…' : selectedStatus === 'published' ? '保存并更新' : '保存草稿' }}</button>
-          <button type="button" :disabled="busy || loading" @click="preview = !preview">{{ preview ? '收起预览' : '预览当前编辑' }}</button>
-          <button type="button" :disabled="busy || loading || !dirty" @click="reset">撤销编辑</button>
-          <button v-if="selectedStatus !== 'published'" type="button" :disabled="busy || loading || dirty || selectedId === null" @click="publish">发布项目</button>
-          <button v-else type="button" :disabled="busy || loading || dirty" @click="archive">下架项目</button>
+          <button type="submit" :disabled="blocked || !dirty">{{ busy ? '正在处理…' : selectedStatus === 'published' ? '保存并更新' : '保存草稿' }}</button>
+          <button type="button" :disabled="blocked" @click="preview = !preview">{{ preview ? '收起预览' : '预览当前编辑' }}</button>
+          <button type="button" :disabled="blocked || !dirty" @click="reset">撤销编辑</button>
+          <button v-if="selectedStatus !== 'published'" type="button" :disabled="blocked || dirty || selectedId === null" @click="publish">发布项目</button>
+          <button v-else type="button" :disabled="blocked || dirty" @click="archive">下架项目</button>
         </div>
         <p v-if="dirty" class="hint">发布或下架前请先保存编辑。预览只展示当前编辑，不会保存。</p>
       </form>

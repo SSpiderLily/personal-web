@@ -117,3 +117,16 @@ test('malformed success preserves baseline and duplicate saves are guarded',asyn
     resolve({project:{id:1}});await pending;assert.equal(page.state.draft.value.name,'保留');assert.equal(page.state.dirty.value,true)
   }finally{page.unmount()}
 })
+
+test('in-flight uploads guard save, publication, ordering and selection until the image can bind',async()=>{
+  let finishUpload,saved=0,published=0,reordered=0
+  const page=mount({list:async()=>({projects:[value(),{...value(),id:2}]}),get:async()=>({project:value()}),upload:()=>new Promise(resolve=>{finishUpload=resolve}),save:async()=>{saved++;return{project:value()}},publish:async()=>{published++;return{project:value()}},reorder:async()=>{reordered++;return{projects:[]}}})
+  try{
+    await flush();await page.state.selectProject(1)
+    const uploading=page.state.uploadApi.upload({name:'test.png'})
+    await page.state.save();await page.state.publish();await page.state.moveProject(1,1);await page.state.selectProject(null)
+    assert.equal(saved,0);assert.equal(published,0);assert.equal(reordered,0);assert.equal(page.state.selectedId.value,1)
+    finishUpload({id:image});page.state.setCover(await uploading)
+    assert.equal(page.state.uploading.value,0);assert.equal(page.state.draft.value.cover_file_id,image)
+  }finally{page.unmount()}
+})
