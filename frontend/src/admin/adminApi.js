@@ -1,5 +1,7 @@
 import { parseToolSettings } from '../tools/publicTools.js'
 const messages = {
+  project_not_found: '项目不存在或已下架。',
+  project_conflict: '项目状态已变化，请刷新后重试。',
   invalid_credentials: '账号或密码不正确，请重试。',
   unauthenticated: '登录已失效，请重新登录。',
   csrf_failed: '会话验证失败，请刷新页面后重试。',
@@ -61,6 +63,15 @@ export function createAdminApi(fetchImpl = (...args) => globalThis.fetch(...args
     try { return parseToolSettings(value) } catch { throw new AdminApiError('unexpected_response') }
   }
   return {
+    projects: () => request('projects'),
+    project: id => request('projects/' + id),
+    createProject: (value, csrf) => request('projects', {method:'POST', body:value, csrf}),
+    saveProject: (id, value, csrf) => request('projects/' + id, {method:'PUT', body:value, csrf}),
+    publishProject: (id, csrf) => request('projects/' + id + '/publish', {method:'POST', body:{}, csrf}),
+    archiveProject: (id, csrf) => request('projects/' + id + '/archive', {method:'POST', body:{}, csrf}),
+    reorderProjects: (ids, csrf) => request('projects/order', {method:'PUT', body:{ids}, csrf}),
+    profile: () => request('profile'),
+    saveProfile: (value, csrf) => request('profile', {method:'PUT', body:value, csrf}),
     tools: async () => toolPayload(await request('tools')),
     saveTools: async (value, csrf) => toolPayload(await request('tools', { method:'PUT', body:value, csrf })),
     uploadFile: async (file, csrf) => {

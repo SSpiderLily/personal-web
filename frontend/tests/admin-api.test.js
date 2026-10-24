@@ -75,3 +75,14 @@ test('file uploads use FormData without manual Content-Type and validate returne
  assert.equal(call.url,'/api/admin/files');assert.ok(call.options.body instanceof FormData);assert.equal(call.options.headers['Content-Type'],undefined);assert.equal(call.options.headers['X-CSRF-Token'],session.csrf_token)
  const bad=createAdminApi(async()=>response({...metadata,url:'https://other.example/secret'}));await assert.rejects(bad.uploadFile(new File(['test'],'test.png'),session.csrf_token),e=>e.code==='unexpected_response')
 })
+
+test('content methods use one protected request adapter and fixed routes', async () => {
+ const calls=[]; const api=createAdminApi(async(url,options)=>{calls.push({url,options}); return response({project:{id:4},projects:[],name:''})})
+ await api.projects(); await api.project(4); await api.createProject({name:'草稿'},'csrf'); await api.saveProject(4,{name:'编辑'},'csrf')
+ await api.publishProject(4,'csrf'); await api.archiveProject(4,'csrf'); await api.reorderProjects([4],'csrf'); await api.profile(); await api.saveProfile({name:''},'csrf')
+ assert.deepEqual(calls.map(x=>[x.url,x.options.method]),[
+ ['/api/admin/projects','GET'],['/api/admin/projects/4','GET'],['/api/admin/projects','POST'],['/api/admin/projects/4','PUT'],
+ ['/api/admin/projects/4/publish','POST'],['/api/admin/projects/4/archive','POST'],['/api/admin/projects/order','PUT'],['/api/admin/profile','GET'],['/api/admin/profile','PUT']])
+ for (const call of calls.filter(x=>x.options.method!=='GET')) {assert.equal(call.options.headers['X-CSRF-Token'],'csrf');assert.equal(call.options.headers['X-Admin-Request'],'1')}
+ assert.deepEqual(JSON.parse(calls[6].options.body),{ids:[4]})
+})

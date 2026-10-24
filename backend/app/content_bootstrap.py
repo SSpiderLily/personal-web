@@ -58,7 +58,7 @@ def bootstrap(settings):
                 raise BootstrapError('Existing content found; refusing to overwrite')
             data=json.loads((ROOT/'backend/content/initial_content.json').read_text())
             image=(ROOT/'frontend/src/assets/trip-preview.png').read_bytes()
-            media,width,height=decode_image(image,'trip-preview.png','image/png')
+            media,width,height=decode_image(image,'trip-preview.jpg','image/jpeg')
             # Enter manually so cleanup remains possible after a failed commit.
             storage=storage_directory(settings,create=True)
             directory=storage.__enter__()
@@ -67,7 +67,7 @@ def bootstrap(settings):
             with os.fdopen(descriptor,'wb') as output:
                 output.write(image); output.flush(); os.fsync(output.fileno())
             conn.execute('''INSERT INTO uploaded_files(id,storage_key,original_name,media_type,byte_size,width,height)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)''',(identifier,key,'trip-preview.png',media,len(image),width,height))
+                VALUES (%s,%s,%s,%s,%s,%s,%s)''',(identifier,key,'trip-preview.jpg',media,len(image),width,height))
             project_id=write_content(conn,data,identifier)
         return project_id
     except BaseException:
