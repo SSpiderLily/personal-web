@@ -12,6 +12,7 @@ function mountAdmin(api) {
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) =>
       'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
     .replace(/^import.*from.*adminApi.*$/gm, '')
+    .replace(/^import ToolsPanel.*$/gm, 'const ToolsPanel = {}')
     .replace('export default', 'return')
   const component = new Function('Vue', 'createAdminApi', 'AdminApiError', compiled)(Vue, () => api, AdminApiError)
   const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null })
@@ -196,4 +197,26 @@ test('protected content failure stays retryable without making up module data', 
     assert.equal(page.state.overviewReady, true)
     assert.equal(page.state.error, '')
   } finally { page.unmount() }
+})
+
+test('authenticated focus verification keeps mounted module content while the session remains valid',async()=>{
+ let delay=false,resolve,overviewCalls=0
+ const page=mountAdmin(api({session:async()=>delay?new Promise(r=>{resolve=r}):authenticated,overview:async()=>{overviewCalls++;return overview}}))
+ try {
+  await flush(); delay=true; const checking=page.state.restoreSession()
+  assert.equal(page.state.phase,'authenticated'); assert.equal(page.state.overviewReady,true)
+  resolve(authenticated); await checking
+  assert.equal(page.state.phase,'authenticated'); assert.equal(page.state.overviewReady,true); assert.equal(overviewCalls,1)
+ } finally {page.unmount()}
+})
+
+test('tools module adapter uses the live CSRF token and routes authentication loss to the login page',async()=>{
+ let saved
+ const payload={tools:[]}
+ const page=mountAdmin(api({session:async()=>authenticated,tools:async()=>payload,saveTools:async(value,csrf)=>{saved={value,csrf};return value}}))
+ try {
+  await flush(); assert.deepEqual(await page.state.toolModuleApi.load(),payload)
+  await page.state.toolModuleApi.save(payload); assert.equal(saved.csrf,authenticated.csrf_token)
+  page.state.moduleUnauthenticated(); assert.equal(page.state.phase,'anonymous'); assert.equal(page.state.session,null)
+ } finally {page.unmount()}
 })

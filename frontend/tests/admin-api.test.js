@@ -60,3 +60,18 @@ test('login and logout reject contradictory success payloads', async () => {
   const logout = createAdminApi(async () => response(session))
   await assert.rejects(logout.logout(session.csrf_token), error => error.code === 'unexpected_response')
 })
+
+const tools = {tools:[...Array.from({length:9},(_,i)=>({tool_key:`grid_0${i+1}`,placement:'grid',is_visible:true,sort_order:i})),{tool_key:'dice',placement:'floating',is_visible:true,sort_order:0}]}
+test('tool settings use protected JSON PUT with bound CSRF and validate complete response',async()=>{
+ const calls=[];const api=createAdminApi(async(url,options)=>{calls.push({url,options});return response(tools)})
+ assert.deepEqual(await api.tools(),tools); await api.saveTools(tools,session.csrf_token)
+ assert.equal(calls[1].url,'/api/admin/tools');assert.equal(calls[1].options.method,'PUT');assert.equal(calls[1].options.headers['X-CSRF-Token'],session.csrf_token)
+ const bad=createAdminApi(async()=>response({tools:[]})); await assert.rejects(bad.tools(),e=>e.code==='unexpected_response')
+})
+test('file uploads use FormData without manual Content-Type and validate returned metadata',async()=>{
+ let call;const metadata={id:'e829699d-abf4-4aa4-b02e-b067b36123e4',media_type:'image/png',byte_size:4,width:2,height:2,url:'/api/admin/files/e829699d-abf4-4aa4-b02e-b067b36123e4'}
+ const api=createAdminApi(async(url,options)=>{call={url,options};return response(metadata,201)})
+ assert.deepEqual(await api.uploadFile(new File(['test'],'test.png'),session.csrf_token),metadata)
+ assert.equal(call.url,'/api/admin/files');assert.ok(call.options.body instanceof FormData);assert.equal(call.options.headers['Content-Type'],undefined);assert.equal(call.options.headers['X-CSRF-Token'],session.csrf_token)
+ const bad=createAdminApi(async()=>response({...metadata,url:'https://other.example/secret'}));await assert.rejects(bad.uploadFile(new File(['test'],'test.png'),session.csrf_token),e=>e.code==='unexpected_response')
+})

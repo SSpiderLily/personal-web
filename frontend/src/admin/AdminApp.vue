@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { createAdminApi, AdminApiError } from './adminApi.js'
+import ToolsPanel from './modules/ToolsPanel.vue'
 
 const props = defineProps({ api: { type: Object, default: () => createAdminApi() } })
 const phase = ref('checking')
@@ -12,6 +13,11 @@ const error = ref('')
 const overviewReady = ref(false)
 const selected = ref('projects')
 let alive = true
+const toolModuleApi = {
+  load: () => props.api.tools(),
+  save: value => props.api.saveTools(value, session.value?.csrf_token),
+}
+function moduleUnauthenticated() { failure(new AdminApiError('unauthenticated', 401)) }
 const modules = [
   { id: 'projects', label: '项目管理', index: '01', description: '维护项目内容、图文详情和展示顺序。', scope: '项目列表、草稿、预览、发布与下架', dependency: '等待项目管理和图片上传接入。' },
   { id: 'statistics', label: '访问统计', index: '02', description: '了解网站和项目的访问人数。', scope: '近 7 天、近 30 天的网站人数与项目浏览人数', dependency: '等待匿名访问记录和去重查询接口接入。' },
@@ -41,8 +47,9 @@ async function readOverview() {
 async function restoreSession() {
   if (busy.value) return
   const wasAnonymous = phase.value === 'anonymous'
+  const wasAuthenticated = phase.value === 'authenticated'
   busy.value = true
-  if (!wasAnonymous) phase.value = 'checking'
+  if (!wasAnonymous && !wasAuthenticated) phase.value = 'checking'
   error.value = ''
   try {
     const value = await props.api.session()
@@ -52,7 +59,7 @@ async function restoreSession() {
       session.value = value
       phase.value = 'authenticated'
       password.value = ''
-      await readOverview()
+      if (!wasAuthenticated || !overviewReady.value) await readOverview()
     }
   } catch (reason) {
     if (!alive) return
@@ -173,14 +180,15 @@ onBeforeUnmount(() => {
           <p class="admin-eyebrow">{{ current.index }} / WEBSITE MANAGEMENT</p>
           <h1 id="admin-module-title">{{ current.label }}</h1>
           <p class="admin-module-description">{{ current.description }}</p>
-          <div class="admin-pending">
+          <ToolsPanel v-if="selected === 'tools'" :api="toolModuleApi" @unauthenticated="moduleUnauthenticated" />
+          <div v-else class="admin-pending">
             <div class="admin-pending-mark" aria-hidden="true">＋</div>
             <p class="admin-badge">尚未接入</p>
             <h2>这里将用于{{ current.label }}</h2>
             <p>{{ current.scope }}</p>
             <p class="admin-muted">{{ current.dependency }}</p>
           </div>
-          <p class="admin-module-note">当前已接通登录与后台框架，业务模块暂不提供编辑和保存操作。</p>
+          <p v-if="selected !== 'tools'" class="admin-module-note">此模块尚未提供编辑和保存操作；小工具管理已接入真实设置。</p>
         </section>
         <p v-else-if="!error" class="admin-muted" role="status">正在读取后台入口…</p>
       </main>

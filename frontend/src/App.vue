@@ -3,6 +3,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import tripPreview from './assets/trip-preview.png'
 import DiceGame from './components/DiceGame.vue'
 import ToolGrid from './components/ToolGrid.vue'
+import { usePublicTools } from './tools/publicTools.js'
+const { status: toolsStatus, error: toolsError, gridItems, diceVisible, load: loadTools } = usePublicTools()
 const profile = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -100,7 +102,10 @@ onMounted(loadProfile)
         </section>
         <aside id="playground" class="playground" aria-labelledby="playground-heading">
           <div class="section-title"><div><p class="eyebrow">LITTLE UTILITIES</p><h2 id="playground-heading">小工具<span class="heading-dot">.</span></h2></div><span class="sidebar-spark" aria-hidden="true">✳</span></div>
-          <ToolGrid />
+          <p v-if="toolsStatus === 'loading'" role="status" class="profile-status">正在加载小工具…</p>
+          <div v-else-if="toolsStatus === 'error'" role="alert" class="profile-status">{{ toolsError }} <button class="retry" @click="loadTools">重试</button></div>
+          <ToolGrid v-else-if="gridItems.length" :items="gridItems" />
+          <p v-else class="profile-status">暂未展示小工具。</p>
         </aside>
       </div>
     </main>
@@ -120,7 +125,7 @@ onMounted(loadProfile)
         </div>
       </div>
     </dialog>
-    <DiceGame />
+    <DiceGame v-if="diceVisible" />
     <footer><a class="brand" href="#about">保持好奇<span class="dot">.</span></a><span>一步一步，把想法变成作品。</span><a href="#about">回到顶部 ↑</a></footer>
   </div>
 </template>
