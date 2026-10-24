@@ -143,6 +143,14 @@ def migrate(config,release,lock_fd):
 
 def verify(config,release,lock_fd):
     data=data_config(config);env=private_environment(data['environment_file'])
-    value=command(release,['-m','app.production_migrate',*expected_args(config['root'],lock_fd)],env,lock_fd)
+    value=command(release,['-m','app.production_migrate','--expect-database','personal_web_prod',
+                           '--expect-user','personal_web_prod'],env)
     if value.get('pending')!=[]:raise RuntimeError('Schema is not ready')
     return command(release,['-m','app.production_readiness'],env)
+
+
+def verify_rollback(config, release, lock_fd):
+    # Old schema may intentionally precede pending migrations. Probe only its actual
+    # tables/images, allowing the initial legacy site with no business schema.
+    env=private_environment(data_config(config)['environment_file'])
+    return command(release,['-m','app.production_readiness','--allow-empty-schema'],env)

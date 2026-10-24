@@ -157,6 +157,10 @@ def verify_data(config, release, lock_fd):
     return data_runtime.verify(config, release, lock_fd)
 
 
+def verify_rollback_data(config, release, lock_fd):
+    return data_runtime.verify_rollback(config, release, lock_fd)
+
+
 def maintenance(config, enabled):
     path = Path(config['data_safety']['maintenance_file'])
     if enabled:
@@ -197,6 +201,7 @@ def activate_data(root, release, config, lock_fd):
         switch(root, previous)
         restart()
         wait_healthy(config, old_sha)
+        verify_rollback_data(config, release, lock_fd)
         maintenance(config, False)
         raise
     maintenance(config, False)
