@@ -17,6 +17,12 @@ const overviewReady = ref(false)
 const selected = ref('projects')
 const visited = ref(new Set(['projects']))
 let alive = true
+let authGeneration = 0
+function isCurrent(generation) { return alive && generation === authGeneration }
+function beginOperation() {
+  busy.value = true
+  return ++authGeneration
+}
 const toolModuleApi = {
   load: () => props.api.tools(),
   save: value => props.api.saveTools(value, session.value?.csrf_token),
@@ -44,6 +50,8 @@ const modules = [
 ]
 const current = computed(() => modules.find(module => module.id === selected.value))
 function clearSession({ preservePassword = false } = {}) {
+  ++authGeneration
+  busy.value = false
   session.value = null
   if (!preservePassword) password.value = ''
   overviewReady.value = false
@@ -56,68 +64,68 @@ function failure(reason) {
   if (reason?.status === 401 || reason?.code === 'unauthenticated') clearSession()
   error.value = reason instanceof AdminApiError ? reason.message : '后台暂时不可用，请稍后重试。'
 }
-async function readOverview() {
+async function readOverview(generation) {
   try {
     await props.api.overview()
-    if (alive) overviewReady.value = true
-  } catch (reason) { failure(reason) }
+    if (isCurrent(generation)) overviewReady.value = true
+  } catch (reason) { if (isCurrent(generation)) failure(reason) }
 }
 async function restoreSession() {
   if (busy.value) return
   const wasAnonymous = phase.value === 'anonymous'
   const wasAuthenticated = phase.value === 'authenticated'
-  busy.value = true
+  const generation = beginOperation()
   if (!wasAnonymous && !wasAuthenticated) phase.value = 'checking'
   error.value = ''
   try {
     const value = await props.api.session()
-    if (!alive) return
+    if (!isCurrent(generation)) return
     if (!value.authenticated) clearSession({ preservePassword: wasAnonymous })
     else {
       session.value = value
       phase.value = 'authenticated'
       password.value = ''
-      if (!wasAuthenticated || !overviewReady.value) await readOverview()
+      if (!wasAuthenticated || !overviewReady.value) await readOverview(generation)
     }
   } catch (reason) {
-    if (!alive) return
+    if (!isCurrent(generation)) return
     if (!wasAuthenticated) {
       clearSession()
       phase.value = 'unavailable'
     }
     failure(reason)
-  } finally { if (alive) busy.value = false }
+  } finally { if (isCurrent(generation)) busy.value = false }
 }
 async function login() {
   if (busy.value) return
-  busy.value = true
+  const generation = beginOperation()
   error.value = ''
   try {
     const value = await props.api.login(username.value.trim(), password.value, session.value?.csrf_token)
-    if (!alive) return
+    if (!isCurrent(generation)) return
     session.value = value
     phase.value = 'authenticated'
     password.value = ''
-    await readOverview()
-  } catch (reason) { failure(reason) }
-  finally { if (alive) { password.value = ''; busy.value = false } }
+    await readOverview(generation)
+  } catch (reason) { if (isCurrent(generation)) failure(reason) }
+  finally { if (isCurrent(generation)) { password.value = ''; busy.value = false } }
 }
 async function logout() {
   if (busy.value || !session.value) return
-  busy.value = true
+  const generation = beginOperation()
   error.value = ''
   try {
     await props.api.logout(session.value.csrf_token)
-    if (alive) clearSession()
-  } catch (reason) { failure(reason) }
-  finally { if (alive) busy.value = false }
+    if (isCurrent(generation)) clearSession()
+  } catch (reason) { if (isCurrent(generation)) failure(reason) }
+  finally { if (isCurrent(generation)) busy.value = false }
 }
 async function refreshOverview() {
   if (busy.value || !session.value) return
-  busy.value = true
+  const generation = beginOperation()
   error.value = ''
-  try { await readOverview() }
-  finally { if (alive) busy.value = false }
+  try { await readOverview(generation) }
+  finally { if (isCurrent(generation)) busy.value = false }
 }
 async function selectModule(id) {
   if (busy.value || !modules.some(module => module.id === id)) return

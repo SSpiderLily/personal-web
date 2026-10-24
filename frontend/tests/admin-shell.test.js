@@ -400,3 +400,115 @@ test('real statistics child retries failures, shows true zero, preserves sibling
   assert.equal(page.state.phase,'anonymous');assert.equal(page.find('input','module-draft'),undefined)
  }finally{page.unmount()}
 })
+
+
+for (const lateResult of ['success', '401', '503']) {
+  test(`real statistics 401 invalidates older session ${lateResult} without blocking a new login`, async () => {
+    let sessionRead = async () => authenticated, rejectStatistics, resolveSession, rejectSession, resolveLogin
+    const page = mountAdmin(api({
+      session: () => sessionRead(),
+      statistics: () => new Promise((_resolve, reject) => { rejectStatistics = reject }),
+      login: () => new Promise(resolve => { resolveLogin = resolve }),
+      overview: async () => overview,
+    }), { render: true })
+    try {
+      await flush()
+      await page.state.selectModule('statistics')
+      await flush()
+      sessionRead = () => new Promise((resolve, reject) => { resolveSession = resolve; rejectSession = reject })
+      const oldCheck = page.state.restoreSession()
+      rejectStatistics(new AdminApiError('unauthenticated', 401))
+      await flush()
+      assert.equal(page.state.phase, 'anonymous')
+      assert.equal(page.state.session, null)
+      assert.equal(page.state.busy, false, 'expired session must leave the login form usable')
+      page.nodes().find(node => node.props.id === 'admin-password').value = 'new login password'
+      page.state.password = 'new login password'
+      const newLogin = page.state.login()
+      if (lateResult === 'success') resolveSession(authenticated)
+      else rejectSession(new AdminApiError(lateResult === '401' ? 'unauthenticated' : 'admin_unavailable', Number(lateResult)))
+      await oldCheck
+      await flush()
+      assert.equal(page.state.phase, 'anonymous', 'old session completion must not restore identity')
+      assert.equal(page.state.session, null)
+      assert.equal(page.state.busy, true, 'old finally must not finish the new login')
+      assert.equal(page.state.password, 'new login password')
+      const freshSession = { ...authenticated, csrf_token: 'c'.repeat(64), admin: { id: 2, username: 'new-admin' } }
+      resolveLogin(freshSession)
+      await newLogin
+      await flush()
+      assert.equal(page.state.session.admin.username, 'new-admin')
+      assert.equal(page.state.overviewReady, true)
+      assert.equal(page.state.busy, false)
+    } finally { page.unmount() }
+  })
+}
+
+test('real statistics 401 stays anonymous after an older session succeeds and overview is unavailable', async () => {
+  let sessionRead = async () => authenticated, rejectStatistics, resolveSession, unavailable = false
+  const page = mountAdmin(api({
+    session: () => sessionRead(),
+    statistics: () => new Promise((_resolve, reject) => { rejectStatistics = reject }),
+    overview: async () => { if (unavailable) throw new AdminApiError('admin_unavailable', 503); return overview },
+  }), { render: true })
+  try {
+    await flush()
+    await page.state.selectModule('statistics')
+    await flush()
+    sessionRead = () => new Promise(resolve => { resolveSession = resolve })
+    const oldCheck = page.state.restoreSession()
+    rejectStatistics(new AdminApiError('unauthenticated', 401))
+    await flush()
+    assert.equal(page.state.phase, 'anonymous')
+    unavailable = true
+    resolveSession(authenticated)
+    await oldCheck
+    await flush()
+    assert.equal(page.state.phase, 'anonymous')
+    assert.equal(page.state.session, null)
+    assert.equal(page.state.overviewReady, false)
+    assert.equal(page.state.busy, false)
+  } finally { page.unmount() }
+})
+
+for (const operation of ['login', 'overview']) {
+  for (const lateResult of ['success', '401', '503']) {
+    test(`cleared authentication ignores pending ${operation} ${lateResult} and its finally`, async () => {
+      let resolveOld, rejectOld, resolveNew, rejectLogin, delayed = false
+      const page = mountAdmin(api({
+        session: async () => operation === 'login' ? anonymous : authenticated,
+        login: () => new Promise((resolve, reject) => { resolveNew = resolve; rejectLogin = reject }),
+        overview: () => delayed ? new Promise((resolve, reject) => { resolveOld = resolve; rejectOld = reject }) : Promise.resolve(overview),
+      }))
+      try {
+        await flush()
+        let pending
+        if (operation === 'login') {
+          page.state.password = 'first password'
+          pending = page.state.login()
+          resolveOld = resolveNew
+          rejectOld = rejectLogin
+        } else {
+          delayed = true
+          pending = page.state.refreshOverview()
+        }
+        page.state.moduleUnauthenticated()
+        assert.equal(page.state.busy, false)
+        page.state.password = 'second password'
+        const newLogin = page.state.login()
+        delayed = false
+        if (lateResult === 'success') resolveOld(operation === 'login' ? authenticated : overview)
+        else rejectOld(new AdminApiError(lateResult === '401' ? 'unauthenticated' : 'admin_unavailable', Number(lateResult)))
+        await pending
+        assert.equal(page.state.phase, 'anonymous')
+        assert.equal(page.state.overviewReady, false)
+        assert.equal(page.state.busy, true)
+        assert.equal(page.state.password, 'second password')
+        resolveNew(authenticated)
+        await newLogin
+        assert.equal(page.state.phase, 'authenticated')
+        assert.equal(page.state.busy, false)
+      } finally { page.unmount() }
+    })
+  }
+}
