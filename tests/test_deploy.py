@@ -26,6 +26,11 @@ class DeploymentTests(unittest.TestCase):
         self.new = self.release(NEW)
         (self.root / 'current').symlink_to(self.old)
         self.config = {'root': str(self.root)}
+        # Preserve historical code-switch regression tests; data boundary is covered separately.
+        gate = patch.object(d.data_runtime, 'data_config', return_value={})
+        gate.start(); self.addCleanup(gate.stop)
+        activation = patch.object(d, 'activate_data', side_effect=lambda root, release, config, fd: d.activate(root, release, config))
+        activation.start(); self.addCleanup(activation.stop)
 
     def release(self, sha):
         p = self.root / 'releases' / sha
