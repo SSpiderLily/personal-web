@@ -260,9 +260,12 @@ async def upload(request: Request, current: auth.AdminSession = Depends(auth.req
     return await run_in_threadpool(save_image, settings, data, name, file.content_type)
 
 
-def load_image(settings, identifier):
+def load_image(settings, identifier, *, conn=None):
     configured_path(settings)
-    with connection(settings) as conn:
+    if conn is None:
+        with connection(settings) as owned:
+            row = owned.execute('SELECT storage_key,media_type,byte_size FROM uploaded_files WHERE id=%s', (identifier,)).fetchone()
+    else:
         row = conn.execute('SELECT storage_key,media_type,byte_size FROM uploaded_files WHERE id=%s', (identifier,)).fetchone()
     if row is None:
         raise auth.AdminError(404, 'file_not_found', '图片不存在。')
