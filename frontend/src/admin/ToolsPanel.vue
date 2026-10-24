@@ -96,7 +96,7 @@ onMounted(load)
         <legend>九宫格工具</legend>
         <ul class="tools-list">
           <li v-for="(item, index) in grid" :key="item.tool_key">
-            <span class="tools-name">工具占位 {{ Number(item.tool_key.slice(-2)) }}<small>{{ item.tool_key }}</small></span>
+            <span class="tools-name">工具占位 {{ Number(item.tool_key.slice(-2)) }}</span>
             <label><input v-model="item.is_visible" type="checkbox" :aria-label="`${item.tool_key} 显示`" @change="saved = false"> 显示</label>
             <div class="tools-order">
               <button type="button" :aria-label="`${item.tool_key} 上移`" :disabled="index === 0" @click="move(item.tool_key, -1)">上移</button>
@@ -108,7 +108,7 @@ onMounted(load)
       <fieldset :disabled="saving || loading" class="tools-floating-group">
         <legend>悬浮工具</legend>
         <div v-for="item in floating" :key="item.tool_key" class="tools-floating">
-          <span class="tools-name">骰子<small>{{ item.tool_key }}</small></span>
+          <span class="tools-name">骰子</span>
           <label><input v-model="item.is_visible" type="checkbox" :aria-label="`${item.tool_key} 显示`" @change="saved = false"> 显示</label>
         </div>
       </fieldset>
@@ -131,7 +131,6 @@ legend { padding: 0 8px; font-weight: 600; }
 .tools-list { list-style: none; margin: 0 0 24px; padding: 0; }
 .tools-list li, .tools-floating { display: flex; align-items: center; gap: 16px; min-height: 64px; border-bottom: 1px solid #edf0e7; }
 .tools-name { flex: 1; min-width: 90px; }
-.tools-name small { display: block; margin-top: 4px; color: #7c8974; font-size: 10px; }
 label { display: flex; align-items: center; gap: 5px; min-height: 44px; white-space: nowrap; }
 input { accent-color: #3d6041; }
 .tools-order { display: flex; gap: 6px; }
