@@ -148,7 +148,9 @@
 | 7 访问人数 | 匿名浏览器标识、访问记录、区间去重查询、后台统计界面与事件消费。 | 复用任务 2 的会话识别和任务 4 的已发布项目查询/详情事件；不改项目发布流程，不在预览中触发统计，不采集范围外的来源/点击数据。 |
 | 8 部署与验收 | 发布与检查脚本、CI、持久目录和配置部署方案、备份恢复、迁移/回退兼容验证、跨模块回归及使用文档。 | 不重写业务模块；发现问题交还相应任务处理。生产操作仍遵守既有授权边界，计划更新不代表获得发布授权。 |
 
-阶段 A 实际新增路径：任务 1 为 `backend/app/database.py`、`backend/app/migrate.py`、`backend/tests/test_database.py`、`backend/tests/test_database_integration.py`、`scripts/test-db.sh`、`scripts/test_database.py`；任务 2A 为 `frontend/src/admin/AdminApp.vue`、`frontend/tests/admin-shell.test.js`，并修改 `frontend/src/main.js`；8A 仅修改本计划。连接/事务/迁移接口见代码 docstring，当前命令见 README。\n\n### 共用文件与接口交接
+阶段 A 实际新增路径：任务 1 为 `backend/app/database.py`、`backend/app/migrate.py`、`backend/tests/test_database.py`、`backend/tests/test_database_integration.py`、`scripts/test-db.sh`、`scripts/test_database.py`；任务 2A 为 `frontend/src/admin/AdminApp.vue`、`frontend/tests/admin-shell.test.js`，并修改 `frontend/src/main.js`；8A 仅修改本计划。连接/事务/迁移接口见代码 docstring，当前命令见 README。
+
+### 共用文件与接口交接
 
 - **共用入口由任务 2 的负责人统一修改：** backend/app/main.py、frontend/src/main.js、frontend/src/App.vue、frontend/src/style.css，以及后续路由/后台导航入口。各任务提交独立模块和最小接入需求；同一时间只有一位负责人修改入口。前后台样式隔离。项目卡片/详情从 App.vue 抽取时也由该负责人协调，任务 4 负责展示行为。
 - **数据库迁移由任务 1 的负责人统一维护：** 其他任务不各自创建相互冲突的初始迁移，不对同一个开发库并发建表或修改结构；测试通过隔离环境执行，不清空共享开发库。
