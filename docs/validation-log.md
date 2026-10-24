@@ -291,3 +291,23 @@
 E开发预览收尾：初次GET收尾出现代理502，直连确认8010与15432已无监听，原后端和隧道进程已停止；原因未确认。按原E目录/配置重新运行scripts/dev.sh，未改变F或服务器生产服务。恢复后直连5182/admin和8010/api/health均200，匿名statistics为401；只读确认personal_web_dev库/账号、管理员1、会话1、项目1、资料1、图片2、工具10、两统计表0，开发账号CONNECT生产为false。未发送访问记录或导入fixture。新dev监督exec会话17453（reload20127、worker20131），前端原进程71172保留；此PID仅是本轮时点记录。
 
 没有fetch/push、main合并或访问/修改生产，未填写真实域名/凭据。原根目录backend/.env.example外部差异SHA256保持0564b4ac99f5a422b0245ea40ed3c28ed8dc3def153e7eef4111977839f985cf，未纳入成果。README现行用法、唯一计划和INDEX导航已同步；任务8未完，不归档整个计划。
+
+
+## 2026-10-25：生产实际配置只读检查与IP上线前命令
+
+范围：用户要求检查实际生产配置并提供手动步骤。通过StrictHostKeyChecking/BatchMode SSH连接ubuntu@124.223.69.7，只执行只读查询；不创建服务器文件/目录、不安装软件、不重启/重载、不迁移、不创建账号、不修改发布开关。读取受控配置及/proc时仅输出白名单字段，密码仅报告已设置；真实数据库密码只在只读psql子进程环境内使用，不输出、不写参数/文件。数据库查询显式BEGIN READ ONLY/ROLLBACK。
+
+实查事实：
+
+- current指向`/opt/personal-web-deploy/releases/f01d1fe704f9-xkr6hoam`，REVISION完整为f01d1fe704f92dde35431041f89f67be6703c8aa。服务active，User=ubuntu，WorkingDirectory为current/backend，Gunicorn监听127.0.0.1:8000、2worker；mainPID991733，worker991738/991739为检查时点。EnvironmentFiles确为/etc/personal-web/app.env，进程实际APP_ENV=production、DEBUG=false、DB_HOST127.0.0.1、PORT5432、DB_NAME/USER均personal_web_prod，密码已设置；UPLOAD_DIR、ADMIN_ALLOWED_ORIGINS和ADMIN_SESSION_HOURS未设置。
+- 用该运行进程的真实连接参数连接成功，current_database/current_user均personal_web_prod。PostgreSQL18.6、18/main在线，数据目录/var/lib/postgresql/18/main，5432仅127.0.0.1/::1监听。两个账号均LOGIN，均非SUPERUSER/CREATEDB/CREATEROLE/REPLICATION/BYPASSRLS；dev→prod、prod→dev、PUBLIC→prod CONNECT全部false，两个库分别由同名角色拥有，无需重建账号或改密码。HBA本机TCP为scram-sha-256，无解析错误。
+- 生产public业务表列表为空；开发库已有001—003对应12张表。没有查询个人内容、密码哈希、会话令牌或访客明细。
+- 当前Nginx实际配置为/etc/nginx/conf.d/personal-web.conf，仅HTTP80、server_name124.223.69.7；root指current/frontend/dist，已有SPA回退，但没有独立assets缺失404、TLS、维护响应和8081探针。/trip/静态及8001代理与诊断保护实际存在。旧配置nginx -t成功；个人网站health和trip/health均正常。443无监听；UFW inactive，云安全组未能从本机配置确认。系统Ubuntu26.04、Python3.14.4、pg_dump18.6。
+- app.env为root:root0600，服务可通过EnvironmentFile读取，但ubuntu部署进程直接读取将失败。deploy.json为root:root0644、enabled=true、health_url=http://127.0.0.1、health_host为IP，没有data_safety；服务器deploy_runtime.py不存在，deploy.py为旧入口。发布锁ubuntu:ubuntu0664，新版需收敛为0600。服务UMask0022、KillModecontrol-group，尚未应用F模板。
+- /var/lib/personal-web、uploads、/var/backups/personal-web、/etc/letsencrypt/live均不存在。现有备份仅first-deploy-20261021，不含本次schema/图片成套恢复证据。未发现专用异机挂载或应用备份/证书定时任务。系统盘约59G，余48G；容量不替代异机备份。
+- Certbot未在PATH，APT候选4.0.0-4；snap存在。依据Let's Encrypt官方2026-03-11文档，webroot IP证书要求Certbot>=5.4，shortlived约160小时且需自动续期，故手动方案采用Snap新版，不安装APT4.0或使用域名专用nginx插件命令。用户确认继续用IP，没有提供异机备份目的地。
+- 本机gh不存在，未读取GitHub DEPLOY_ENABLED或远端main；服务器开关实查为true，不能据此断言仓库开关开启/关闭。也未执行fetch/push/main合并。
+
+交接更新：README集中列出9步手动命令和停止点；本地ops/nginx-ip.conf.example按实查保留原trip路由，补HTTPS/ACME/维护/私有探针；发布JSON例子使用固定IP，replica_root留空，全部发布和前提开关仍为false。唯一计划及INDEX同步。新配置仅做本地静态检查，未上传/执行或用生产nginx -t验证；旧配置通过不代表新配置已验收。生产迁移/首次账号/内容/备份恢复与新代码发布仍未实施，本轮不重跑业务测试、不把整个阶段F计为完成。
+
+参考：[Let's Encrypt IP证书和Certbot步骤](https://letsencrypt.org/2026/03/11/shorter-certs-certbot)、[Certbot安装](https://eff-certbot.readthedocs.io/en/stable/install.html)、[续期](https://eff-certbot.readthedocs.io/en/stable/using.html#renewing-certificates)、[systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)。
