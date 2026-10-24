@@ -141,7 +141,7 @@ uv run --locked python -m app.content_bootstrap
 
 ## 检查与预览
 
-在项目根目录执行 `bash scripts/check.sh`。它安装锁定依赖，运行部署保护、后端和前端测试，检查 Gunicorn 配置，再构建前端；会更新 `.venv`、`node_modules` 和构建产物，不启动常驻服务、不调用线上 API。首次安装需要联网，不在生产服务器上直接运行该脚本。
+在项目根目录执行 `bash scripts/check.sh`。它安装锁定依赖，运行后端、部署保护、真实临时备份恢复和前端测试，检查 Gunicorn 配置，再构建前端；会更新 `.venv`、`node_modules` 和构建产物，不启动常驻服务、不调用线上 API。首次安装需要联网。阶段F起该检查还要求本机PostgreSQL服务端/客户端工具；缺失明确失败，不把恢复测试跳过当作通过。不在生产服务器上直接运行该脚本。
 
 - 单独检查前端：`npm --prefix frontend test`；生产构建：`npm --prefix frontend run build`，输出 `frontend/dist/`。
 - 本地构建预览：在 frontend 执行 `npm run preview:local`，输出 `dist-local/` 并在 http://127.0.0.1:4173 提供页面，API 仍需本机 8010 后端。
@@ -158,7 +158,7 @@ bash scripts/test-db.sh
 PG_BIN=/Library/PostgreSQL/17/bin bash scripts/test-db.sh
 ```
 
-该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通统一检查会明确跳过真实 PostgreSQL 用例，必须另跑此专项才能验收数据库功能。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，Linux 工具发现逻辑尚未实测；云端开发库 18.6 仅做新驱动只读冒烟。
+该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通后端发现会明确跳过真实 PostgreSQL 业务用例，必须另跑此专项；统一检查另有自建临时集群的真实备份恢复用例。CI两项都运行。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，Linux 工具发现逻辑尚未实测；云端开发库 18.6 仅做新驱动只读冒烟。
 
 ## 发布与恢复
 
@@ -174,7 +174,7 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 - `/etc/personal-web/deploy.json` 为运行配置，使用 GitHub SSH 仓库地址及腾讯 HTTPS 依赖镜像；服务名为 `fastapi-personal-web`，Gunicorn 双 worker 监听本机 8000。
 - `/usr/local/lib/personal-web/deploy.py` 是服务器部署入口；修改仓库脚本后须显式同步此文件，发布不会自动覆盖它。
 
-部署脚本校验锁定依赖与包哈希，准备新 release 后才切换、重启并检查 API、首页、资源和版本标记。失败尝试恢复上一链接，仍返回发布失败；发布锁、Actions 并发组和过期提交检查防止交叠覆盖。重启可能短暂中断，进程强杀或断电不能保证自动回退。
+阶段F的新部署入口保留锁定依赖、包哈希、main/HEAD和启用开关保护，并强制要求`data_safety`配置；旧配置会明确拒绝部署。先构建，再建立维护响应、停止全部个人网站worker、完成数据库/图片备份及副本校验、执行串行迁移，最后切换并检查API/资源/版本、schema和数据库/图片。备份、迁移或新版本验证失败均尝试恢复兼容旧代码；旧服务及数据检查成功后才解除维护，恢复失败则继续维护并报错。代码失败不自动恢复数据库/图片。强杀、断电及部署进程外的写入仍需人工处理。服务器安装脚本尚未由本轮更新，新保护不是线上现状。
 
 ### 首次加载生产配置（需要在服务器操作）
 
@@ -213,6 +213,56 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 
 首次发布前的旧站点保留在 `/opt/personal-web`，备份位于 `/opt/personal-web-deploy/backups/first-deploy-20261021`。该目录的 `restore-old.sh` 会恢复首次发布前站点并重启个人网站、重载 Nginx；它不等同于回退最近一个 release。真实故障回退尚未演练，未确认事项见部署归档。
 
+### 阶段 F 生产工具与操作顺序
+
+以下工具已在本地隔离环境实现和演练，尚未在生产执行。上线前按[后台计划](docs/admin-management-plan.md)核实真实域名/证书、服务用户、目录和异机备份。配置示例为`ops/deploy-data.json.example`、`ops/nginx-admin.conf.example`及`ops/systemd-override.conf.example`；默认禁用和占位值必须保留到对应前提有证据，不能直接复制示例后启用。
+
+1. 先控制自动发布，固定目标提交和旧schema兼容性。新代码、模板与服务器安装脚本分别核对；安装`deploy.py`时须同时安装同目录`deploy_runtime.py`，该辅助模块不是单独的服务器命令。
+2. uploads放在release之外，应用和部署使用同一实际用户；末级目录0700、图片0600，路径不含符号链接。备份根和副本根均为私有0700目录，彼此及uploads不能重叠；持久目录不能被旧release清理覆盖。备份副本必须另有异机隔离及加密挂载证据；第二路径字节校验本身不能证明这两项。
+3. 配好真实HTTPS、证书续期及精确`ADMIN_ALLOWED_ORIGINS`。Nginx公网维护响应覆盖个人网站前台和所有`/api/`请求（含统计），保留现有`/trip/`配置；私图不设静态alias。独立127.0.0.1:8081探针监听只供本机使用，不对外反向代理。Gunicorn仅信任127.0.0.1转发协议。合并模板后须在服务器执行`sudo nginx -t`，成功才重载；模板不替代现有完整站点配置。
+4. systemd继续使用外部`EnvironmentFile`。新部署适配器也须能读取同一文件；默认root:root0600可以继续用于服务，若部署用户无权限，适配器会在停服前拒绝。经确认后可由管理员将文件设为root拥有、仅专用部署组可读的0640，并仅授予现有应用/部署用户该组；不设0644，不在release中复制密钥。部署适配器只支持单行字面量`KEY=value`、必要引号和整行注释，不执行shell、不接受export、多行或环境展开；修改格式后需分别核对systemd与适配器加载结果，避免改变实际密码。
+5. 核实没有其他写入者、已有可恢复备份及真实恢复演练，逐项填写`data_safety.prerequisites`证据后才启用。发布外层一次持有0600的`deploy.lock`，维护文件必须在uploads和备份之外，父目录允许部署用户创建、Nginx可检查。部署命令不再假定`/api/health`证明数据库正常。
+
+迁移和首次账号初始化使用独立生产入口，开发命令保持拒绝production。下面是命令接口，必须在受控生产进程环境已加载后运行；不要在普通SSH环境直接执行，也不要`source`配置文件或把密码写在命令参数中：
+
+```sh
+# 默认只读，JSON列出已执行和待执行版本；无历史表时不建表。
+python -m app.production_migrate \
+  --expect-database personal_web_prod --expect-user personal_web_prod
+
+# 受发布锁保护的显式迁移；集成流程另外继承自己的--lock-fd。
+python -m app.production_migrate \
+  --expect-database personal_web_prod --expect-user personal_web_prod \
+  --execute --lock-file /opt/personal-web-deploy/deploy.lock
+
+# 默认只读查看schema与是否已有账号；无默认账号，不自动初始化。
+python -m app.production_admin_init \
+  --expect-database personal_web_prod --expect-user personal_web_prod
+```
+
+首次管理员执行在以上命令追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`，必须真实TTY输入用户名及两次不回显密码；已有账号拒绝覆盖。可由管理员用`systemd-run --pty --wait --collect`建立临时服务，指定实际`User`、`WorkingDirectory`及同一`EnvironmentFile`后启动该命令，避免将凭据经过聊天或shell展开。生产命令只接受personal_web_prod同名库/账号并核实真实身份；只读调用不带执行锁参数。没有自动生产内容初始化，不复制开发库或开发账号；真实旅行助手内容如何进入生产须在生产盘点后明确。
+
+备份工具由部署流程在所有写入者停止后调用，也可以在人工停写窗口内使用相同接口。`--writers-stopped`是操作方确认，工具本身不替操作者停止服务；独立备份后还须由外层恢复服务并验证，不能仅隐藏后台按钮：
+
+```sh
+# 使用已加载的受控环境，路径、PG版本和revision按实际替换。
+python scripts/data_backup.py create \
+  --uploads-dir /var/lib/personal-web/uploads \
+  --backup-root /var/backups/personal-web \
+  --replica-root /实际加密异机挂载目录/personal-web \
+  --revision 完整40位旧应用提交SHA --pg-bin /实际PostgreSQL/bin \
+  --lock-file /opt/personal-web-deploy/deploy.lock --execute --writers-stopped
+
+# 只读校验整组归档和逐图片摘要；不代替恢复演练。
+python scripts/data_backup.py verify --backup /绝对路径/备份组
+```
+
+备份组含`manifest.json`、`database.dump`、`uploads.tar`，记录旧应用提交、实际schema前缀、数据库/账号、内容摘要及逐文件摘要，不含明文配置。数据库dump自身包含业务数据及密码哈希/会话摘要，整组仍须按敏感数据保护。失败不清理旧有效组。本版不自动删除备份或安装定时任务；周期、日7份/周4份、恢复点和恢复时间尚待生产容量与演练确认。
+
+`restore-test --backup PATH --uploads-dir NEW_PATH --pg-bin PATH --execute`仅接受`APP_ENV=test`、本机独立端口、`personal_web_test_*`空库/`personal_web_test`账号和全新私有图片目录。账号及空库须先在隔离实例创建，函数、类型等已有对象也会拒绝。实际恢复、表数据/序列、schema和图片引用均要通过才报告成功；验证失败保留测试目标供诊断，不自动删库。该入口不能覆盖生产库；真实生产恢复需要成套保存现场、停写、确认备份后数据损失并单独执行已审阅流程。
+
+本地验证入口：`bash scripts/check.sh`及`bash scripts/test-db.sh`。部署测试需要真实PostgreSQL工具，`PW_REQUIRE_RECOVERY_TESTS=1`禁止静默跳过恢复用例。真实生产TLS、续期、Nginx重载、systemd配置加载和异机恢复未由本地构建证明，具体已验证范围见[验证记录](docs/validation-log.md)。
+
 ## 文档维护
 
-文档维护与计划归档按 [production 统一规则](../AGENTS.md#文档管理)执行。
+文档维护与计划归档按原项目父级 `production/AGENTS.md` 的统一规则执行。
