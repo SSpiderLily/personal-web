@@ -1,0 +1,29 @@
+{
+  "enabled": false,
+  "root": "/opt/personal-web-deploy",
+  "repository": "git@github.com:SSpiderLily/personal-web.git",
+  "tool_path": "/opt/personal-web-tools/bin",
+  "python": "/usr/bin/python3",
+  "health_url": "http://127.0.0.1:18881",
+  "health_host": "124.223.69.7",
+  "data_safety": {
+    "enabled": false,
+    "environment_file": "/etc/personal-web/app.env",
+    "uploads_dir": "/var/lib/personal-web/uploads",
+    "backup_root": "/var/backups/personal-web",
+    "replica_root": "/var/backups/personal-web-mirror",
+    "pg_bin": "/usr/lib/postgresql/18/bin",
+    "maintenance_file": "/var/lib/personal-web/maintenance",
+    "prerequisites": {
+      "restore_drill_passed": false,
+      "previous_schema_compatible": false,
+      "exclusive_writer_service": false,
+      "ssh_tunnel_verified": false,
+      "public_admin_blocked": false,
+      "local_backup_accepted": false
+    },
+    "mode": "http_ssh",
+    "public_origin": "http://124.223.69.7",
+    "admin_origin": "http://127.0.0.1:18880"
+  }
+}

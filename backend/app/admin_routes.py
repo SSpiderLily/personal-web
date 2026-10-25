@@ -78,7 +78,7 @@ async def login(request: Request, settings: Settings = Depends(auth.require_writ
     current = await run_in_threadpool(auth.authenticate, settings, username, password, request.cookies.get(auth.COOKIE))
     response = JSONResponse(current.response())
     response.set_cookie(auth.COOKIE, current.token, max_age=settings.admin_session_hours * 3600,
-                        path=auth.COOKIE_PATH, secure=settings.app_env == 'production', httponly=True, samesite='strict')
+                        path=auth.COOKIE_PATH, secure=auth.secure_cookie(settings), httponly=True, samesite='strict')
     return response
 
 
@@ -88,7 +88,7 @@ async def logout(request: Request, current: auth.AdminSession = Depends(auth.req
     await json_object(request)
     await run_in_threadpool(auth.revoke_session, settings, current)
     response = JSONResponse(auth.ANONYMOUS)
-    response.delete_cookie(auth.COOKIE, path=auth.COOKIE_PATH, secure=settings.app_env == 'production', httponly=True, samesite='strict')
+    response.delete_cookie(auth.COOKIE, path=auth.COOKIE_PATH, secure=auth.secure_cookie(settings), httponly=True, samesite='strict')
     return response
 
 

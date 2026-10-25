@@ -413,3 +413,14 @@ main CI40174116758：Python3.13成功，Python3.14在test_interrupt_cleans_incom
 最终新release解释器只读复核：001/002/003均应用、pending=[]，12张表全部归personal_web_prod，工具10；管理员/会话/项目/资料/图片及网站/项目统计均0。开发/生产CONNECT双向false，开发角色无生产表读写权限。现有schema、内容/序列摘要和上传清单与迁移后已验证Mac副本对应manifest一致；初次比较遗漏备份规定的UTC会话导致时间字段序列化摘要不等，按同一SET LOCAL timezone=UTC重查一致，不存在数据变更或恢复操作。
 
 GitHub DEPLOY_ENABLED=false、服务器enabled=false/data_safety.enabled=false，异机挂载路径仍空；没有把单次Mac加密副本冒充持续复制。用户排除HTTPS的条件下，本轮完成代码合并、依赖安装及候选准备，不等同生产新站发布。后续须补HTTPS、发布可用异机备份和生产管理员/内容，再执行最新main的受保护发布。README/计划及INDEX入口已同步。根目录.env.example原有差异摘要仍0564b4ac99f5a422b0245ea40ed3c28ed8dc3def153e7eef4111977839f985cf；本轮未覆盖或提交。
+
+
+## 2026-10-25：临时HTTP前台／同机备份／SSH后台实现与发布前验证
+
+用户明确批准原IP HTTP前台、同机备份、SSH隧道后台及真实内容先录入再切换；本轮取代HTTPS/异机作为上线前提的限制，不伪填旧模式证据。实现合同与执行状态维护在唯一计划，现行用法已补README。分工为后端边界、部署适配器/模板、生产内容入口；只修改各自文件后集成，没有复制开发数据。
+
+先失败测试后实现：HTTP+SSH配置/来源/Peer/Cookie/访问统计9项，部署显式模式及来源/前提15项，生产内容入口缺失测试。后端额外拒绝组播/IPv6/私网公源；保持默认HTTPS要求不变。生产内容复用事务/图片写入逻辑，但开发入口仍拒绝生产，生产入口要求真实身份、同一锁和完整schema，默认只读、幂等不覆盖。最初新测试fixture只填site_profile.name违反title/introduction非空限制，补齐测试数据后通过；未更改生产约束。
+
+本轮统一检查scripts/check.sh退出0：后端发现208项（95项需SQL专项，其余通过），65项部署/真实备份恢复通过，前端165项及生产构建通过。日志/private/tmp/pw-http-ssh-check.log。随后补充真实隔离HTTP+SSH登录/会话/CSRF保存/注销、访问去重及管理员排除联合用例，完整SQL专项数据库28、后台120、工具7、统计17，共172项通过；日志/private/tmp/pw-http-ssh-db-joint.log。它只使用自建PG17.11 Unix socket实例和合成账号，不访问共享数据库。
+
+独立审查检查tracked和untracked全部改动，无Critical/Important；审查方独立15项部署适配器与9项HTTP/SSH测试通过，git diff --check正常。真实Nginx/公网/SSH/生产数据库与账号验收尚未执行，不能从本地结果推断。新代码和文档准备提交CI，GitHub自动发布仍false。旧站只读检查health正常、current f01d1fe、nginx -t正常；旧profileAPI仍为“你的名字/个人网站”默认占位，不作为真实生产内容来源，按此前确认保留tracked真实旅行助手并移除这些占位。

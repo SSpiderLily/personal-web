@@ -40,6 +40,10 @@ def bootstrap(settings):
         validate_test_target(settings)
     elif settings.app_env != 'development' or (settings.db_name,settings.db_user) != ('personal_web_dev','personal_web_dev'):
         raise BootstrapError('Development database/account required; refusing initialization')
+    return _bootstrap(settings)
+
+
+def _bootstrap(settings, *, require_current_schema=False):
     created=False
     identifier=uuid4()
     key=str(identifier)
@@ -51,6 +55,13 @@ def bootstrap(settings):
             if identity != (settings.db_name,settings.db_user):
                 raise BootstrapError('Database identity mismatch; refusing initialization')
             conn.execute("SET LOCAL lock_timeout='5s'")
+            if require_current_schema:
+                from app import migrate
+                from app.production_migrate import snapshot
+                conn.execute('SELECT pg_advisory_xact_lock(%s)', (migrate.LOCK_ID,))
+                state = snapshot(conn, settings, migrate._load_migrations(migrate.MIGRATIONS))
+                if state['pending']:
+                    raise BootstrapError('Apply all migrations before content initialization')
             conn.execute('SELECT pg_advisory_xact_lock(%s)',(LOCK,))
             conn.execute('SELECT pg_advisory_xact_lock(194521, 5)')
             previous=conn.execute('SELECT project_id FROM content_bootstraps WHERE key=%s',(KEY,)).fetchone()

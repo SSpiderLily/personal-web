@@ -1,5 +1,6 @@
 """Single backend configuration entry point. Never opens a database connection."""
 from functools import lru_cache
+from ipaddress import IPv4Address
 import os
 from pathlib import Path
 import re
@@ -13,6 +14,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 LOCAL_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
+def validate_http_ssh_origins(public_origin: str | None, admin_origins: tuple[str, ...]) -> None:
+    """The temporary deployment accepts one public IP and explicit private ports."""
+    try:
+        public = urlsplit(public_origin or '')
+        address = IPv4Address(public.hostname or '')
+        if not address.is_global or address.is_multicast or public_origin != f'http://{address}':
+            raise ValueError
+        if not admin_origins:
+            raise ValueError
+        for origin in admin_origins:
+            parsed = urlsplit(origin)
+            port = parsed.port
+            if port is None or not 1024 <= port <= 65535 or origin != f'http://127.0.0.1:{port}':
+                raise ValueError
+    except ValueError:
+        raise ValueError('HTTP SSH mode requires an exact HTTP public IPv4 origin and HTTP 127.0.0.1 administrator origins with explicit nonstandard ports') from None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=None, env_file_encoding="utf-8", extra="forbid",
@@ -21,6 +40,8 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     debug: bool = False
+    production_mode: Literal["https", "http_ssh"] = "https"
+    public_origin: str | None = None
     db_host: str = "127.0.0.1"
     db_port: int = Field(default=15432, ge=1, le=65535)
     db_name: str = "personal_web_dev"
@@ -49,6 +70,9 @@ class Settings(BaseSettings):
             object.__setattr__(self, "admin_allowed_origins", (
                 "http://localhost:5180", "http://127.0.0.1:5180",
                 "http://localhost:5182", "http://127.0.0.1:5182"))
+        if self.app_env == "production" and self.production_mode == "http_ssh":
+            validate_http_ssh_origins(self.public_origin, self.admin_allowed_origins)
+            return self
         for origin in self.admin_allowed_origins:
             parsed = urlsplit(origin)
             try:

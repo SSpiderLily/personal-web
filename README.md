@@ -96,7 +96,7 @@ uv run --locked python -m app.admin_init
 
 `ADMIN_ALLOWED_ORIGINS` 使用精确来源的 JSON 数组，例如 `ADMIN_ALLOWED_ORIGINS='["http://127.0.0.1:5182"]'`。开发默认允许 localhost/127.0.0.1 的5180、5182端口；更换前端端口时须显式配置并重启后端。不开放跨域访问。
 
-生产默认不开放管理接口：必须配置可信 HTTPS 来源，且应用实际识别为 HTTPS。反向代理和可信代理配置在部署阶段验证，不能信任任意客户端转发头。阶段 B 的初始化命令拒绝 production；生产首次账号初始化、HTTPS、真实反向代理和发布验收仍待部署阶段处理，不能直接照用开发初始化步骤。
+默认HTTPS模式的生产环境不开放未配置可信HTTPS来源的管理接口；临时HTTP+SSH模式见下方发布说明。反向代理和可信代理配置在部署阶段验证，不能信任任意客户端转发头。阶段 B 的初始化命令拒绝 production；生产首次账号初始化、HTTPS、真实反向代理和发布验收仍待部署阶段处理，不能直接照用开发初始化步骤。
 
 ## 现有功能与修改入口
 
@@ -161,6 +161,42 @@ PG_BIN=/Library/PostgreSQL/17/bin bash scripts/test-db.sh
 该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通后端发现会明确跳过真实 PostgreSQL 业务用例，必须另跑此专项；统一检查另有自建临时集群的真实备份恢复用例。CI两项都运行。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，以及Ubuntu上的隔离PostgreSQL18.6；后者自建临时集群，不连接系统5432生产实例。恢复测试采用解析后的/tmp真实目录，兼容macOS符号链接与Linux路径。
 
 ## 发布与恢复
+
+### 临时上线：HTTP 前台与 SSH 后台
+
+用户已批准此临时模式：公开地址为 http://124.223.69.7 ，公网`/admin`和管理接口返回404；只有精确的匿名访问记录接口可公开写入。后台只监听服务器本机18880端口，18881为只读发布探针，两个端口都不开放公网。配置模板见`ops/nginx-http-ssh.conf.example`及`ops/deploy-http-ssh.json.example`，实际上线状态见[计划](docs/admin-management-plan.md)及[验证记录](docs/validation-log.md)。原HTTPS模式仍为代码默认值，以下三项必须显式配置：
+
+```dotenv
+PRODUCTION_MODE=http_ssh
+PUBLIC_ORIGIN=http://124.223.69.7
+ADMIN_ALLOWED_ORIGINS='["http://127.0.0.1:18880"]'
+```
+
+在Mac保持一个SSH终端运行，再用浏览器打开 http://127.0.0.1:18880/admin ：
+
+```sh
+ssh -NT -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=yes \
+  -L 127.0.0.1:18880:127.0.0.1:18880 ubuntu@124.223.69.7
+```
+
+只使用127.0.0.1及固定18880端口，不换成localhost、局域网地址或公网IP；SSH断开后后台不可达。若端口已占用，先确认是否是自己已有的同一隧道，不盲目结束进程。管理Cookie仅在这个显式模式去掉Secure，仍为HttpOnly、SameSite=Strict及原路径；账号、会话、CSRF与上传校验保留。登录后通过隧道地址预览前台可排除管理员访问；另开公网IP属于另一个Cookie来源，会按匿名浏览器计数。
+
+生产首个管理员在服务器真实终端初始化，不把密码放入命令或聊天：
+
+```sh
+sudo systemd-run --unit=personal-web-admin-init --pty --wait --collect \
+  --service-type=exec -p User=ubuntu -p UMask=0077 \
+  -p EnvironmentFile=/etc/personal-web/app.env \
+  --working-directory=/opt/personal-web-deploy/current/backend \
+  /opt/personal-web-deploy/current/backend/.venv/bin/python \
+  -m app.production_admin_init --expect-database personal_web_prod \
+  --expect-user personal_web_prod --execute \
+  --lock-file /opt/personal-web-deploy/deploy.lock
+```
+
+按提示输入用户名和两次12—128字符密码。已有账号时拒绝覆盖；初始化后通过上述隧道登录。生产内容使用独立入口`python -m app.production_content_init --expect-database personal_web_prod --expect-user personal_web_prod`只读预检；仅在持锁停写且已备份时追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`录入版本控制中的真实旅行助手、介绍和图片。它不会导入开发库或覆盖已有内容；原开发bootstrap继续拒绝生产。
+
+同机成套备份保存在`/var/backups/personal-web`，校验副本在`/var/backups/personal-web-mirror`，均为私有目录，每次发布前停写创建并校验。两份都在同一服务器，不能抵御整机损毁；本轮按用户明确取舍不要求异机备份。发布仍使用原持锁、备份、迁移、维护、健康和数据核验及代码回退流程，不自动恢复数据库。恢复演练使用独立空测试实例，不能向生产库直接试恢复。
 
 日常流程：任务分支修改 → 本地检查与页面验证 → 提交推送 → PR 检查 → 获得发布授权后合并。`.github/workflows/ci.yml` 在分支、PR 和手动触发时运行统一检查；部署仅允许 main 且全部检查通过。CI 本身不阻止合并失败 PR，主分支保护的未核实事项见部署归档。
 
@@ -242,7 +278,7 @@ python -m app.production_admin_init \
   --expect-database personal_web_prod --expect-user personal_web_prod
 ```
 
-首次管理员执行在以上命令追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`，必须真实TTY输入用户名及两次不回显密码；已有账号拒绝覆盖。可由管理员用`systemd-run --pty --wait --collect`建立临时服务，指定实际`User`、`WorkingDirectory`及同一`EnvironmentFile`后启动该命令，避免将凭据经过聊天或shell展开。生产命令只接受personal_web_prod同名库/账号并核实真实身份；只读调用不带执行锁参数。没有自动生产内容初始化，不复制开发库或开发账号；真实旅行助手内容如何进入生产须在生产盘点后明确。
+首次管理员执行在以上命令追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`，必须真实TTY输入用户名及两次不回显密码；已有账号拒绝覆盖。可由管理员用`systemd-run --pty --wait --collect`建立临时服务，指定实际`User`、`WorkingDirectory`及同一`EnvironmentFile`后启动该命令，避免将凭据经过聊天或shell展开。生产命令只接受personal_web_prod同名库/账号并核实真实身份；只读调用不带执行锁参数。生产内容由独立production_content_init入口显式录入，不随启动自动运行，不复制开发库或开发账号；本轮已批准使用版本控制中的真实旅行助手内容。
 
 备份工具由部署流程在所有写入者停止后调用，也可以在人工停写窗口内使用相同接口。`--writers-stopped`是操作方确认，工具本身不替操作者停止服务；独立备份后还须由外层恢复服务并验证，不能仅隐藏后台按钮：
 
