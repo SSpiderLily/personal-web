@@ -400,3 +400,16 @@ GitHub连接器不提供Actions变量管理；浏览器设置页加载超时且�
 该候选临时双worker仅监听随机本机端口，以实际production环境读取真实生产库：health/profile/projects/tools200，骰子范围1—6，admin/session503符合缺少来源/TLS时关闭预期；Nginx用户可读前端index。项目仍空，未制造内容/账号/会话/统计；临时进程组已停止，未操作systemd/current/Nginx。回执prepared-release-smoke.json，日志prepared-release-smoke.log均私有。
 
 main CI40174116758：Python3.13成功，Python3.14在test_interrupt_cleans_incomplete_staging_and_pgpass失败，断言子进程PID应不存在却仍存在；不是依赖下载问题，未只做重试。新test_data_backup_process确定性在Popen已生成自有sleep子进程、尚未返回句柄时发送SIGINT，原实现稳定失败（child仍运行），新实现通过。pg_run用pthread_sigmask在Popen赋值期间延迟SIGINT，在恢复原掩码后的中断/超时/异常中kill+wait，再退出PGPASSFILE上下文，保持600秒超时和输出隐藏。Mac55项通过；Ubuntu55项完整复验通过。独立限定复审无Critical/Important。候选d3bc249尚不含此修复，最终准备版本须另行记录。
+
+
+## 2026-10-25：最终候选与本轮收尾核验
+
+中断修复PR11 https://github.com/SSpiderLily/personal-web/pull/11 的head67c2b56fd426c3ef671ee55c4d65364290d5b435：PR CI40174591460 Python3.13/3.14均success、deploy skipped；显式核对head后合并543a1d700b6973d049a7954f8516efb4110c8807。main CI40174727738两项检查也全部success、deploy skipped，原main中断失败已由代码修复闭环，未仅重跑掩盖。
+
+使用同一安装版fetch/prepare及发布锁，从准确main重新安装最终候选`/opt/personal-web-deploy/releases/543a1d700b69-s4tz5kgz`，26项生产依赖按哈希锁定，前端npm ci/build与Gunicorn配置检查通过；没有本地.env，没有触碰current或重启正式服务。回执`/home/ubuntu/personal-web-migrations/prepared-release-543a1d700b69.json`，本机日志/private/tmp/pw-prepared-final-release.log。暂存补测目录ad51bab本轮另上传了修复脚本/测试，仅供测试；候选从Git main归档重新构建，未从已修改的暂存目录复制运行代码。
+
+最终候选以实际生产配置启动仅本机临时双worker：health/profile/projects/tools200，骰子200且值1—6；admin/session503符合未开放来源/TLS的保护。Nginx用户可读index，临时进程组结束清理。prepared-release-smoke.json已更新指向最终543a1d7，运行日志同名.log私有保存。正式服务active，个人网站和旅行助手健康，REVISION仍f01d1fe704f92dde35431041f89f67be6703c8aa；未修改Nginx/证书/443或新建账号内容。
+
+最终新release解释器只读复核：001/002/003均应用、pending=[]，12张表全部归personal_web_prod，工具10；管理员/会话/项目/资料/图片及网站/项目统计均0。开发/生产CONNECT双向false，开发角色无生产表读写权限。现有schema、内容/序列摘要和上传清单与迁移后已验证Mac副本对应manifest一致；初次比较遗漏备份规定的UTC会话导致时间字段序列化摘要不等，按同一SET LOCAL timezone=UTC重查一致，不存在数据变更或恢复操作。
+
+GitHub DEPLOY_ENABLED=false、服务器enabled=false/data_safety.enabled=false，异机挂载路径仍空；没有把单次Mac加密副本冒充持续复制。用户排除HTTPS的条件下，本轮完成代码合并、依赖安装及候选准备，不等同生产新站发布。后续须补HTTPS、发布可用异机备份和生产管理员/内容，再执行最新main的受保护发布。README/计划及INDEX入口已同步。根目录.env.example原有差异摘要仍0564b4ac99f5a422b0245ea40ed3c28ed8dc3def153e7eef4111977839f985cf；本轮未覆盖或提交。
