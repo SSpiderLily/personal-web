@@ -447,30 +447,30 @@ mountpoint -q /mnt/personal-web-backup && \
   sudo install -d -o ubuntu -g ubuntu -m 0700 /mnt/personal-web-backup/personal-web
 ```
 
-随后将`replica_root`填为真实私有目录，并完成成套备份及隔离恢复演练，确认容量/耗时、旧schema兼容和全部写入者均受控，才逐项确认prerequisites。当前生产没有业务表/管理员/内容，新后台代码也尚未发布；不要对当前current运行`app.production_migrate`或`app.production_admin_init`，这些模块尚不存在。下一次发布必须先准备目标新release及备份、受保护迁移，再切换；生产管理员由用户TTY初始化，网站资料和旅行助手内容还须明确录入方案。开发初始化命令仍不能用于生产，不复制开发库/账号/会话/统计。
+随后将`replica_root`填为真实私有目录，并完成成套备份及隔离恢复演练，确认容量/耗时、旧schema兼容和全部写入者均受控，才逐项确认prerequisites。2026-10-25生产已独立完成001—003迁移，现有12张表和10项默认工具，尚无管理员/项目/资料/图片/访问数据。迁移工具暂存于`/home/ubuntu/personal-web-migrations/ad51bab`，当前current仍是旧f01d1fe，不要对旧current运行新模块。后续发布须验证目标release与现有schema校验和，再按保护流程处理任何新增迁移后才切换；生产管理员由用户TTY初始化，网站资料和旅行助手内容还须明确录入方案。开发初始化命令仍不能用于生产，不复制开发库/账号/会话/统计。
 
-恢复演练、新代码CI、生产内容及发布材料全部准备好后，才按单独发布授权打开服务器和GitHub开关。步骤1—8只是服务器配套准备，不代表生产上线或任务8验收完成。
+001—003及迁移后Mac快照恢复已通过；持续备份、新代码CI、生产内容及发布材料全部准备好后，才按单独发布授权打开服务器和GitHub开关。步骤1—8只是服务器配套准备，不代表生产上线或任务8验收完成。
 
-### Mac 加密基线备份的读取
+### Mac 加密备份的读取
 
-用户再次明确授权后，2026-10-25已完成当前生产基线的Mac加密副本和端到端恢复验证。此备份对应旧f01d1fe、业务表0、图片0；持续异机备份和以后有业务数据时的恢复仍需另行落实，不能用旧基线覆盖新数据。
+2026-10-25生产001—003迁移完成后，最新恢复点已更新为迁移后快照，包含12张表和10项默认工具配置。它仍无管理员、项目、资料、图片或访问记录；以后真实内容有变化时需另取新备份，不能把当前快照当作长期最新恢复点。原空库基线、迁移前及迁移后副本均保留，按各自回执区分，不能混用。
 
-加密映像位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/baseline-20261024T164646Z.dmg`，解密材料单独保存在同级production/keys目录，验证回执在backups内。它们均在Git外；目录0700、文件0600。解密材料不要放进备份映像或提交到仓库，保留映像时也须保留对应key文件。key文件是解密口令文件，不是证书私钥。
+最新迁移后映像位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.dmg`，配对口令文件位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.key`。文件及回执均在Git外，目录0700、文件0600；口令文件不要放进映像或提交到Git。它是解密口令文件，不是证书私钥。
 
-在Mac终端只读打开，无需将口令显示或粘贴到聊天：
+在Mac终端只读打开，无需显示或粘贴口令：
 
 ```sh
-PW_BACKUP='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/baseline-20261024T164646Z.dmg'
-PW_KEY='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/baseline-20261024T164646Z.key'
+PW_BACKUP='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.dmg'
+PW_KEY='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.key'
 PW_MOUNT="$(mktemp -d /private/tmp/pw-backup-read-XXXXXX)"
 hdiutil attach -readonly -nobrowse -stdinpass -mountpoint "$PW_MOUNT" "$PW_BACKUP" < "$PW_KEY"
 ls -l "$PW_MOUNT"
-# 查看/复制所需备份文件后，卸载并移除本次空挂载目录。
+# 查看/复制所需文件后，卸载并移除本次空挂载目录。
 hdiutil detach "$PW_MOUNT"
 rmdir "$PW_MOUNT"
 ```
 
-映像内有database.dump、uploads.tar、baseline-manifest.json。dump由PostgreSQL18.6生成，恢复时使用兼容的18.6工具及独立目标；不要向生产/开发库直接执行pg_restore。验证范围和映像摘要只维护在[验证记录](docs/validation-log.md)及Git外回执中。
+迁移前/后的标准备份组含database.dump、uploads.tar、manifest.json；最早空库基线另用baseline-manifest.json，须按对应格式识别。迁移后快照已实际从Mac解密文件在独立PG18.6中恢复，并验证schema/数据摘要、12张表、10项工具及图片清单。恢复必须使用独立目标和兼容PG18.6工具，不向生产/开发库直接试恢复。摘要、源代码/版本及演练证据集中见[验证记录](docs/validation-log.md)同日条目和Git外回执；一次性Mac副本不等于已配置自动异机复制。
 
 ## 文档维护
 

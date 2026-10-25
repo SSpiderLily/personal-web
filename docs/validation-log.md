@@ -346,3 +346,28 @@ README已标记可跳过的已执行步骤及health_url保留理由，唯一计�
 - 生产服务active、原REVISION仍f01d1fe704f92dde35431041f89f67be6703c8aa，health为ok。本轮未修改生产schema、HTTPS、账号、配置或发布开关。
 
 验证仅覆盖当前无业务表/图片的基线，一次性Mac异机副本已可用；未配置持续异机复制或自动备份，不能据此将服务器replica挂载/TLS/完整恢复前提改true。README读取方式、唯一计划当前状态及INDEX同步；没有业务代码变更，不重跑不相关业务测试；未push/main合并，整体仍7/8。
+
+
+## 2026-10-25：独立执行生产001—003迁移并验证迁移后恢复点
+
+授权：用户确认备份通过，要求继续HTTPS以外生产准备，先迁移生产数据库，暂不合并发布。本轮只执行数据库表结构准备及必要备份/演练；旧站f01d1fe保持，未创建管理员、项目、个人资料或统计，也未操作HTTPS/证书/Nginx/远端Git。
+
+来源与环境：使用本地已审查ad51bab提交的Git archive，tar SHA256为a7ea5df346e573d06c759349c283a46904bbbedf8ca54b9453a04edf78b7846d，服务器上传后摘要一致；解压于/home/ubuntu/personal-web-migrations/ad51bab私有目录，未覆盖current。独立Python3.14.4、uv0.12.3环境依据锁文件导出完整依赖并按哈希安装。默认源下载停滞，核对PID/CWD后仅终止此次暂存uv进程，改用既有腾讯镜像及现有发布同款uv export/pip sync --require-hashes流程。依赖未装完时曾过早启动测试，缺少模块而失败，无生产访问；齐备后隔离专项又因SSH默认umask0002令测试锁组可写而被正确拒绝。确认根因后按已生效的生产UMask0077重跑，未放宽锁保护、未改业务代码或SQL。
+
+迁移前验证：服务器临时PG18.6集群/专用Unix socket、Python3.14.4，数据库28、后台113、工具7、统计17，共165项全部通过；日志/home/ubuntu/personal-web-migrations/ad51bab-pg18-tests-0077.log。独立测试中的同名生产角色/库只存在于该自建集群，非系统5432生产实例。使用受控app.env及实际ubuntu身份只读预检生产，applied=[]、pending001/002/003，public业务表0、上传0、双向CONNECT false，服务器两个发布开关false。
+
+迁移流程：持有/opt/personal-web-deploy/deploy.lock，短暂停止原worker并确认inactive及无其他生产会话。先获取最新标准备份，再恢复旧服务完成Mac传输/恢复；正式执行时重新持锁停worker，核对生产真实库/账号、备份schema及内容摘要和上传清单一致，使用app.production_migrate --execute --expect-database personal_web_prod --expect-user personal_web_prod --lock-file ... --lock-fd N。001—003及schema_migrations同事务提交；finally启动旧应用并检查健康，不自动down/恢复数据。SQL未修改，SHA256分别为：
+
+- 001_admin_schema：b47c9141e0b42926660dc7002230910a1b7254e76a516f824f9650c4672b6d1c。
+- 002_tool_defaults：270d6d609a3b71f44ee151afaa0762a1d59d6553dba768787437b715e8247753。
+- 003_content_fields：9e5d42c9952f5ff12e6ff161871d2bd0c0caee8109f0e209606b6bb6e7c6d03a。
+
+结果：只读复核applied3/pending空，12表均归personal_web_prod。schema_migrations3行、tool_settings10行；admin_accounts/admin_sessions/projects/project_blocks/project_screenshots/site_profile/uploaded_files/site_daily_visitors/project_daily_visitors/content_bootstraps均0。开发/生产CONNECT双向false，开发角色对生产业务表无SELECT/INSERT/UPDATE/DELETE权限。production_readiness实际数据库、存储和7/30统计读取通过，admin_initialized=false、images0。迁移结果与回执保存于私有暂存目录migration-result.json、premigration/postmigration-receipt.json；没有导入开发数据。
+
+备份与端到端恢复：
+
+- 最新迁移前标准备份：`/var/backups/personal-web/2026-10-25T072259377030Z-f01d1fe704f9-2f25deca8742`；Mac映像`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/premigration-2026-10-25T072259377030Z-f01d1fe704f9-2f25deca8742.dmg`，SHA256 4cebe5aa2eab740091fec4d11f5b1e1b09199702c26ca2ab8c8bba5d1c577dfd。从映像实际解密文件经标准restore-test在独立PG18.6恢复，0业务表/0工具，耗时1.584秒。
+- 迁移后标准备份：`/var/backups/personal-web/2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3`；Mac映像`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.dmg`，SHA256 a4fdb751f5cfd2965eeb8300c2143f5e5e938d86e18ba1dd647c42b94a3d38e5。从映像实际解密文件经标准restore-test恢复，12张表/10项工具、全部3项schema及校验和正确，耗时1.416秒。
+- 每组含manifest.json/database.dump/uploads.tar，先完整校验服务器同机传输缓存，再Mac AES256加密、hdiutil verify/只读解密、逐文件摘要核对，最后回传解密文件到/var/tmp/pw-canonical-restore-*独立测试集群（Unix socket、端口25436、listen_addresses为空）实际恢复；不以原服务器dump替代。每个口令独立保存在Git外production/keys目录，均0600，映像/回执亦0600、父目录0700。临时实例、回传明文、Mac明文和挂载均清理，现有基线映像保留。
+
+发布边界：最终生产服务active，个人网站及旅行助手health正常；REVISION仍f01d1fe704f92dde35431041f89f67be6703c8aa，服务器enabled=false、data_safety.enabled=false、全部发布前提false、无443监听。旧应用不读新业务表，保持当前前台；没有合并/推送/发布。迁移后SQL具备初始工具行，但不等同生产账号、真实内容、HTTPS或自动异机备份已完成，整体任务仍7/8。README/唯一计划/INDEX已同步当前迁移状态与最新恢复点，原.env.example外部改动未纳入提交。
