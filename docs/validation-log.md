@@ -371,3 +371,19 @@ README已标记可跳过的已执行步骤及health_url保留理由，唯一计�
 - 每组含manifest.json/database.dump/uploads.tar，先完整校验服务器同机传输缓存，再Mac AES256加密、hdiutil verify/只读解密、逐文件摘要核对，最后回传解密文件到/var/tmp/pw-canonical-restore-*独立测试集群（Unix socket、端口25436、listen_addresses为空）实际恢复；不以原服务器dump替代。每个口令独立保存在Git外production/keys目录，均0600，映像/回执亦0600、父目录0700。临时实例、回传明文、Mac明文和挂载均清理，现有基线映像保留。
 
 发布边界：最终生产服务active，个人网站及旅行助手health正常；REVISION仍f01d1fe704f92dde35431041f89f67be6703c8aa，服务器enabled=false、data_safety.enabled=false、全部发布前提false、无443监听。旧应用不读新业务表，保持当前前台；没有合并/推送/发布。迁移后SQL具备初始工具行，但不等同生产账号、真实内容、HTTPS或自动异机备份已完成，整体任务仍7/8。README/唯一计划/INDEX已同步当前迁移状态与最新恢复点，原.env.example外部改动未纳入提交。
+
+
+## 2026-10-25：完整部署授权及发布前验证（进行中）
+
+用户授权完成依赖和生产代码部署，替代前轮不合并发布限制。工作区production/AGENTS.md及父工作区入口已读；原项目无AGENTS.md。实际目录admin-phase-f、分支codex/admin-phase-f，fetch确认origin/main仍f01d1fe。
+
+本轮bash scripts/check.sh退出0：后端194项（91项需隔离实例，其余通过），部署/真实恢复54项通过，前端165项通过，Gunicorn及生产构建通过。bash scripts/test-db.sh退出0：隔离临时PG17.11数据库28、后台113、工具7、统计17共165项通过。日志/private/tmp/pw-release-check-20261025.log及pw-release-db-20261025.log。依赖声明已完整包含psycopg[binary]、pwdlib[argon2]、Pillow和python-multipart，无额外依赖修改。
+
+服务器ad51bab私有暂存目录使用既有Node22.22.1安装前端锁文件并执行165项测试/生产构建成功，后端独立Python3.14.4依赖沿用本日迁移准备中按哈希安装的环境；不复用旧current。只读复核无IP证书、无443/8081监听，仍旧Nginx HTTP配置及current f01d1fe；发布/data_safety/前提全部false，replica_root为空。生产表此前已迁移，无需重复建表。
+
+一次本地文档更新+commit+push组合命令在执行前被自动审批整体拒绝，故该命令未修改文档、未提交或推送。理由为部署记录含运维路径/状态，公开远端信息授权不够明确；随后已说明仓库SSpiderLily/personal-web为公开仓库并向用户请求明确选择。未通过其他工具绕过拒绝。HTTPS是否纳入本轮也已异步询问，未答前未操作证书。
+
+
+用户随后明确同意将代码和现有部署记录推送至公开仓库SSpiderLily/personal-web，自动审批所缺的具体远端及数据范围授权已补齐；同时确认继续排除HTTPS，先完成其他部署准备。GitHub变量接口未由现有连接器提供；浏览器设置页面加载超时，未修改仓库变量。服务器部署开关保持false，保证main合并不能绕过TLS保护。
+
+服务器补测：后端第一次从仓库根启动导致app导入失败；按scripts/check.sh规定改到backend后194项发现通过（91项待隔离实例，本日已另跑165项PG18专项）。恢复专项首次在Ubuntu重现FileNotFoundError：两处TemporaryDirectory写死/private/tmp，27项普通部署测试运行、恢复测试类无法启动。最小改/tmp后Ubuntu54项通过，但Mac因/tmp为符号链接触发现有安全校验，20项失败。最终统一为Path('/tmp').resolve()，不修改业务代码/备份安全校验；Mac54项全部通过，最终Ubuntu54项复验通过。暂存目录只上传了该测试文件进行补测，迁移SQL及运行代码未改；原ad51bab.tar摘要仍只指原始Git archive，不能用来代表补测后的整个暂存目录。

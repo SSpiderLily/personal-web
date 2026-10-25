@@ -158,7 +158,7 @@ bash scripts/test-db.sh
 PG_BIN=/Library/PostgreSQL/17/bin bash scripts/test-db.sh
 ```
 
-该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通后端发现会明确跳过真实 PostgreSQL 业务用例，必须另跑此专项；统一检查另有自建临时集群的真实备份恢复用例。CI两项都运行。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，Linux 工具发现逻辑尚未实测；云端开发库 18.6 仅做新驱动只读冒烟。
+该入口使用本机 initdb/pg_ctl/psql，每次新建并清理临时集群和数据库，仅监听独立 Unix socket，不需要 SSH，也不使用现有开发/生产库。普通后端发现会明确跳过真实 PostgreSQL 业务用例，必须另跑此专项；统一检查另有自建临时集群的真实备份恢复用例。CI两项都运行。可通过 PG_BIN 指定工具目录；未安装服务端程序时专项明确失败。当前已实测 macOS PostgreSQL 17.11，以及Ubuntu上的隔离PostgreSQL18.6；后者自建临时集群，不连接系统5432生产实例。恢复测试采用解析后的/tmp真实目录，兼容macOS符号链接与Linux路径。
 
 ## 发布与恢复
 

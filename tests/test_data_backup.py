@@ -18,6 +18,8 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/data_backup.py'
 PYTHON = ROOT / 'backend/.venv/bin/python'
+# /tmp exists on both platforms; resolve macOS's symlink for backup path guards.
+TEST_TMP = Path('/tmp').resolve()
 # Both Linux CI and the local macOS installation are supported.
 _candidates = ([Path(os.environ['APP_TEST_PG_BIN'])] if os.environ.get('APP_TEST_PG_BIN') else
                [Path(shutil.which('initdb')).parent] if shutil.which('initdb') else
@@ -38,7 +40,7 @@ class DataBackupTests(unittest.TestCase):
             raise RuntimeError('Install independent backend dependencies before recovery tests')
         cls.stack = ExitStack()
         cls.addClassCleanup(cls.stack.close)
-        cls.cluster = Path(cls.stack.enter_context(tempfile.TemporaryDirectory(prefix='pwbackup-', dir='/private/tmp')))
+        cls.cluster = Path(cls.stack.enter_context(tempfile.TemporaryDirectory(prefix='pwbackup-', dir=TEST_TMP)))
         cls.socket = cls.cluster / 'socket'
         cls.socket.mkdir(mode=0o700)
         cls.env = {k: v for k, v in os.environ.items() if not k.startswith(('PG', 'DB_', 'APP_'))}
@@ -63,7 +65,7 @@ class DataBackupTests(unittest.TestCase):
                        '-v', 'ON_ERROR_STOP=1', '-Atc', sql)
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='pwbackup-case-', dir='/private/tmp')
+        self.temp = tempfile.TemporaryDirectory(prefix='pwbackup-case-', dir=TEST_TMP)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.db = 'personal_web_test_' + uuid.uuid4().hex
