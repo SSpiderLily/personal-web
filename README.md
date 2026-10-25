@@ -174,7 +174,7 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 - `/etc/personal-web/deploy.json` 为运行配置，使用 GitHub SSH 仓库地址及腾讯 HTTPS 依赖镜像；服务名为 `fastapi-personal-web`，Gunicorn 双 worker 监听本机 8000。
 - `/usr/local/lib/personal-web/deploy.py` 是服务器部署入口；修改仓库脚本后须显式同步此文件，发布不会自动覆盖它。
 
-阶段F的新部署入口保留锁定依赖、包哈希、main/HEAD和启用开关保护，并强制要求`data_safety`配置；旧配置会明确拒绝部署。先构建，再建立维护响应、停止全部个人网站worker、完成数据库/图片备份及副本校验、执行串行迁移，最后切换并检查API/资源/版本、schema和数据库/图片。备份、迁移或新版本验证失败均尝试恢复兼容旧代码；旧服务及数据检查成功后才解除维护，恢复失败则继续维护并报错。代码失败不自动恢复数据库/图片。强杀、断电及部署进程外的写入仍需人工处理。2026-10-25服务器已安装新部署双文件，服务器发布及data_safety开关均关闭；业务current仍是f01d1fe，不能据此视为新后台已发布。
+阶段F的新部署入口保留锁定依赖、包哈希、main/HEAD和启用开关保护，并强制要求`data_safety`配置；旧配置会明确拒绝部署。先构建，再建立维护响应、停止全部个人网站worker、完成数据库/图片备份及副本校验、执行串行迁移，最后切换并检查API/资源/版本、schema和数据库/图片。备份、迁移或新版本验证失败均尝试恢复兼容旧代码；旧服务及数据检查成功后才解除维护，恢复失败则继续维护并报错。代码失败不自动恢复数据库/图片。强杀、断电及部署进程外的写入仍需人工处理。2026-10-25服务器已安装新部署双文件，GitHub自动发布、服务器发布及data_safety开关均关闭；业务current仍是f01d1fe，新后台候选release准备不等同正式发布。
 
 ### 首次加载生产配置（需要在服务器操作）
 
@@ -215,7 +215,7 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 
 ### 阶段 F 生产工具与操作顺序
 
-以下工具已在本地隔离环境实现和演练，尚未在生产执行。上线前按[后台计划](docs/admin-management-plan.md)核实真实域名/证书、服务用户、目录和异机备份。配置示例为`ops/deploy-data.json.example`、`ops/nginx-admin.conf.example`及`ops/systemd-override.conf.example`；默认禁用和占位值必须保留到对应前提有证据，不能直接复制示例后启用。
+迁移和备份工具已在生产执行并核验；新后台代码已合并并在服务器构建候选release，但尚未切换current。用户本轮继续排除HTTPS，因此GitHub自动发布及服务器开关保持关闭。具体已验证范围及候选版本见[验证记录](docs/validation-log.md)。正式上线前按[后台计划](docs/admin-management-plan.md)核实真实域名/证书、服务用户、目录和异机备份。配置示例为`ops/deploy-data.json.example`、`ops/nginx-admin.conf.example`及`ops/systemd-override.conf.example`；默认禁用和占位值必须保留到对应前提有证据，不能直接复制示例后启用。
 
 1. 先控制自动发布，固定目标提交和旧schema兼容性。新代码、模板与服务器安装脚本分别核对；安装`deploy.py`时须同时安装同目录`deploy_runtime.py`，该辅助模块不是单独的服务器命令。
 2. uploads放在release之外，应用和部署使用同一实际用户；末级目录0700、图片0600，路径不含符号链接。备份根和副本根均为私有0700目录，彼此及uploads不能重叠；持久目录不能被旧release清理覆盖。备份副本必须另有异机隔离及加密挂载证据；第二路径字节校验本身不能证明这两项。
