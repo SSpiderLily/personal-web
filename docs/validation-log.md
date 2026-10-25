@@ -424,3 +424,31 @@ GitHub DEPLOY_ENABLED=false、服务器enabled=false/data_safety.enabled=false�
 本轮统一检查scripts/check.sh退出0：后端发现208项（95项需SQL专项，其余通过），65项部署/真实备份恢复通过，前端165项及生产构建通过。日志/private/tmp/pw-http-ssh-check.log。随后补充真实隔离HTTP+SSH登录/会话/CSRF保存/注销、访问去重及管理员排除联合用例，完整SQL专项数据库28、后台120、工具7、统计17，共172项通过；日志/private/tmp/pw-http-ssh-db-joint.log。它只使用自建PG17.11 Unix socket实例和合成账号，不访问共享数据库。
 
 独立审查检查tracked和untracked全部改动，无Critical/Important；审查方独立15项部署适配器与9项HTTP/SSH测试通过，git diff --check正常。真实Nginx/公网/SSH/生产数据库与账号验收尚未执行，不能从本地结果推断。新代码和文档准备提交CI，GitHub自动发布仍false。旧站只读检查health正常、current f01d1fe、nginx -t正常；旧profileAPI仍为“你的名字/个人网站”默认占位，不作为真实生产内容来源，按此前确认保留tracked真实旅行助手并移除这些占位。
+
+
+## 2026-10-25：临时HTTP／SSH方案真实上线与验收（管理员待用户设置）
+
+PR13 head0c17e423abcd87b7e2576fb59872fafc57ea6d9c，PR CI40186885743 Python3.13/3.14均success；合并9ccdc94bb8c665c3046ec761eb5e2114a173646b，main CI40187075525 success，deploy skipped（GitHub自动发布false）。临时模式实现和原HTTPS模式均通过检查后才进行真实发布。
+
+配置准备：修改前持同一发布锁，将app.env/deploy.json/Nginx及部署双文件备份至root私有`/etc/personal-web/http-ssh-before-20261025T110008Z`。安装时逐文件核对本地摘要，备份父目录0700，app.env仍root:personal-web-ops0640，密码行不变；只增加PRODUCTION_MODE/PUBLIC_ORIGIN及精确loopback管理来源。旧f01代码无这些新字段，实际导入验证仍可启动。建立ubuntu0700同机mirror，安装模板后nginx -t通过才reload，失败分支会还原配置。Nginx18880及18881均只监听127.0.0.1；HTTP80保留，未配置TLS/443或修改数据库公网监听。
+
+Mac通过真实公网请求验证health200、/admin及/api/admin/session404，经StrictHostKeyChecking/BatchMode SSH -L访问127.0.0.1:18880/__release.txt返回旧版，私有配置错误Host拒绝。SSH监督会话65665保持；私有后台需要该隧道运行，不把远程本机监听当作已验证公网隔离。
+
+内容准备候选为`/opt/personal-web-deploy/releases/9ccdc94bb8c6-ggd_k6n8`，由main归档/锁定依赖重新构建。首次操作脚本误用系统Python，在任何停服/写入前因缺psycopg退出；改用该候选虚拟环境后执行成功。持锁维护、停worker并核对无其他生产连接，录入前备份`/var/backups/personal-web/2026-10-25T110623524381Z-f01d1fe704f9-fb03489b13d3`。独立生产入口核对目标/schema并录入真实旅行助手及封面，返回project_id1；开发bootstrap没有用于生产。录入后备份`/var/backups/personal-web/2026-10-25T110625519288Z-f01d1fe704f9-c8d77a92ccb5`，在自建PG18.6临时集群、Unix socket25436中经标准restore-test恢复，12表/项目1/图片1/账号0通过，约1.5秒，随后清理自有实例/目录。finally恢复并验证旧站后解除维护。回执`/home/ubuntu/personal-web-http-ssh/content-preparation-receipt.json`。
+
+根据实际SSH、公网拒绝、同机恢复、停写与旧兼容证据启用http_ssh的六项前提，未伪填TLS/异机字段。服务器发布开关只在本轮受保护执行窗口设true；调用安装版deploy.py --execute 9ccdc94...，经历main/HEAD两次fetch、同一锁、生产依赖安装和前端构建、维护/停写、备份、幂等迁移、切换及健康/数据库/图片就绪检查。正式current为`/opt/personal-web-deploy/releases/9ccdc94bb8c6-1kp61ujk`。finally发布开关恢复false，data_safety.enabled=true/mode=http_ssh，GitHub自动发布仍false，维护标记已删除。旧release保留，没有手工ln绕过保护。deployment.log及deployment-receipt.json位于同一私有准备目录。
+
+正式发布前最后备份`/var/backups/personal-web/2026-10-25T110814641695Z-f01d1fe704f9-c88abccbdf8d`，镜像副本为同名`/var/backups/personal-web-mirror/`目录，逐字节一致；目录0700、文件0600。其内容及图片摘要与已实际恢复的录入后快照一致。manifest旧应用版本f01d1fe表示备份发生在切换之前，不代表备份没有新录入的内容。本轮没有将新数据复制到Mac或将同机副本称为异机；原Mac迁移后快照早于内容录入，README已明确它不是当前最新恢复点。
+
+外部验收：公网版本9ccdc94、health/profile/projects/tools及trip/health均200；唯一真实旅行助手已published、3段说明、封面字节SHA256为5bdd0cce92e3e82df3f9913df75b42f4ad69318f961379d3ccddf024d515ba51，Content-Type image/jpeg，与受版本控制源图一致。/admin、/admin/login、管理session/projects、编码路径/api/%61dmin/session、/api/admin%2fsession、重复斜杠及伪造Host/Forwarded头均404；公开统计错误Origin403，私有端口错误Host404。SSH匿名session200/authenticated=false；私有/trip跳转公网后200。没有发送有效凭据或伪造业务fixture来验收生产。
+
+应用内浏览器连接超时，改用Playwright受控headed浏览器：1440×1000桌面、390×844手机、项目详情/真实封面、骰子动画结束显示6点、SSH后台登录表单均通过；手机horizontalOverflow=false、图片均loaded。正常页面浏览产生实际匿名统计，最新只读时网站记录2/项目记录1（不是导入开发记录）；后续随访问变化。截图与快照移到Git外私有`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/verification/http-ssh-20261025`，无账号密码录屏或存储快照。
+
+正式进程核验：systemd active，master1592537及两个worker1592539/1592540为当时时点；/proc白名单确认APP_ENV=production、DEBUG=false、PRODUCTION_MODE=http_ssh、PUBLIC_ORIGIN为公网IP、ADMIN_ALLOWED_ORIGINS仅127.0.0.1:18880、DB_NAME/USER=personal_web_prod、持久UPLOAD_DIR正确。只读实际库12表、001—003无待项、项目1/说明3/资料1/图片1/工具10，开发/生产CONNECT双向false。当前管理员/会话0，已给用户真实TTY命令并异步等待初始化结果，未代设密码或复制开发账号；初始化后还需真实登录确认及补充含账号状态备份，所以任务8与整计划不标完成、不归档。后续HTTPS/异机为用户延期选择，不是本轮上线阻碍。README中过时空库/旧候选描述已纠正，旧HTTPS独有步骤迁移到既有归档并标为历史，INDEX已同步。
+
+
+## 2026-10-25：管理员延期与文档合并授权
+
+用户明确决定暂不初始化生产管理员，由用户最后手动收尾；本轮不创建账号、不修改生产配置或业务数据。README补全SSH登录服务器、真实TTY初始化成功标志、Mac隧道、登录/刷新/退出及后续账号核验和同机备份流程。任务8仍待这些收尾验收，计划保持7/8，不归档。
+
+用户明确允许合并仅含文档的PR14，并撤销早先“暂不合并发布”限制。本轮将更新后的同一文档PR交由CI检查，检查通过后合并；该授权不要求再次部署，生产继续使用已验收的9ccdc94。

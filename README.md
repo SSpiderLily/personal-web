@@ -96,7 +96,7 @@ uv run --locked python -m app.admin_init
 
 `ADMIN_ALLOWED_ORIGINS` 使用精确来源的 JSON 数组，例如 `ADMIN_ALLOWED_ORIGINS='["http://127.0.0.1:5182"]'`。开发默认允许 localhost/127.0.0.1 的5180、5182端口；更换前端端口时须显式配置并重启后端。不开放跨域访问。
 
-默认HTTPS模式的生产环境不开放未配置可信HTTPS来源的管理接口；临时HTTP+SSH模式见下方发布说明。反向代理和可信代理配置在部署阶段验证，不能信任任意客户端转发头。阶段 B 的初始化命令拒绝 production；生产首次账号初始化、HTTPS、真实反向代理和发布验收仍待部署阶段处理，不能直接照用开发初始化步骤。
+默认HTTPS模式的生产环境不开放未配置可信HTTPS来源的管理接口；临时HTTP+SSH模式见下方发布说明。反向代理和可信代理配置在部署阶段验证，不能信任任意客户端转发头。阶段 B 的初始化命令拒绝 production；生产首次账号使用下方独立TTY入口；当前临时反向代理与发布已验证，不能直接照用开发初始化步骤。
 
 ## 现有功能与修改入口
 
@@ -181,7 +181,7 @@ ssh -NT -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=yes \
 
 只使用127.0.0.1及固定18880端口，不换成localhost、局域网地址或公网IP；SSH断开后后台不可达。若端口已占用，先确认是否是自己已有的同一隧道，不盲目结束进程。管理Cookie仅在这个显式模式去掉Secure，仍为HttpOnly、SameSite=Strict及原路径；账号、会话、CSRF与上传校验保留。登录后通过隧道地址预览前台可排除管理员访问；另开公网IP属于另一个Cookie来源，会按匿名浏览器计数。
 
-生产首个管理员在服务器真实终端初始化，不把密码放入命令或聊天：
+生产管理员按用户决定暂不初始化，不影响已上线的公开前台。最后收尾时，先在Mac终端运行`ssh ubuntu@124.223.69.7`，然后在服务器真实终端执行以下命令，不把密码放入命令或聊天：
 
 ```sh
 sudo systemd-run --unit=personal-web-admin-init --pty --wait --collect \
@@ -194,7 +194,7 @@ sudo systemd-run --unit=personal-web-admin-init --pty --wait --collect \
   --lock-file /opt/personal-web-deploy/deploy.lock
 ```
 
-按提示输入用户名和两次12—128字符密码。已有账号时拒绝覆盖；初始化后通过上述隧道登录。生产内容使用独立入口`python -m app.production_content_init --expect-database personal_web_prod --expect-user personal_web_prod`只读预检；仅在持锁停写且已备份时追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`录入版本控制中的真实旅行助手、介绍和图片。它不会导入开发库或覆盖已有内容；原开发bootstrap继续拒绝生产。
+按提示输入用户名和两次12—128字符密码，成功结果包含`"initialized":true`。已有账号时拒绝覆盖；初始化后在另一个Mac终端运行上述隧道命令，通过固定后台地址登录，检查刷新和退出。完成后只需告知初始化结果，再核验账号/会话并补充一份含账号状态的同机备份，不发送密码。生产内容使用独立入口`python -m app.production_content_init --expect-database personal_web_prod --expect-user personal_web_prod`只读预检；仅在持锁停写且已备份时追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`录入版本控制中的真实旅行助手、介绍和图片。它不会导入开发库或覆盖已有内容；原开发bootstrap继续拒绝生产。
 
 同机成套备份保存在`/var/backups/personal-web`，校验副本在`/var/backups/personal-web-mirror`，均为私有目录，每次发布前停写创建并校验。两份都在同一服务器，不能抵御整机损毁；本轮按用户明确取舍不要求异机备份。发布仍使用原持锁、备份、迁移、维护、健康和数据核验及代码回退流程，不自动恢复数据库。恢复演练使用独立空测试实例，不能向生产库直接试恢复。
 
@@ -210,7 +210,7 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 - `/etc/personal-web/deploy.json` 为运行配置，使用 GitHub SSH 仓库地址及腾讯 HTTPS 依赖镜像；服务名为 `fastapi-personal-web`，Gunicorn 双 worker 监听本机 8000。
 - `/usr/local/lib/personal-web/deploy.py` 是服务器部署入口；修改仓库脚本后须显式同步此文件，发布不会自动覆盖它。
 
-阶段F的新部署入口保留锁定依赖、包哈希、main/HEAD和启用开关保护，并强制要求`data_safety`配置；旧配置会明确拒绝部署。先构建，再建立维护响应、停止全部个人网站worker、完成数据库/图片备份及副本校验、执行串行迁移，最后切换并检查API/资源/版本、schema和数据库/图片。备份、迁移或新版本验证失败均尝试恢复兼容旧代码；旧服务及数据检查成功后才解除维护，恢复失败则继续维护并报错。代码失败不自动恢复数据库/图片。强杀、断电及部署进程外的写入仍需人工处理。2026-10-25服务器已安装新部署双文件，GitHub自动发布、服务器发布及data_safety开关均关闭；业务current仍是f01d1fe，新后台候选release准备不等同正式发布。
+阶段F的新部署入口保留锁定依赖、包哈希、main/HEAD和启用开关保护，并强制要求`data_safety`配置；旧配置会明确拒绝部署。先构建，再建立维护响应、停止全部个人网站worker、完成数据库/图片备份及副本校验、执行串行迁移，最后切换并检查API/资源/版本、schema和数据库/图片。备份、迁移或新版本验证失败均尝试恢复兼容旧代码；旧服务及数据检查成功后才解除维护，恢复失败则继续维护并报错。代码失败不自动恢复数据库/图片。强杀、断电及部署进程外的写入仍需人工处理。当前临时HTTP+SSH模式已正式部署。GitHub自动发布保持关闭，服务器发布开关只在授权窗口打开后关闭；data_safety按已验证的http_ssh模式启用。
 
 ### 首次加载生产配置（需要在服务器操作）
 
@@ -251,9 +251,7 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 
 ### 阶段 F 生产工具与操作顺序
 
-本轮含修复的候选已安装到`/opt/personal-web-deploy/releases/543a1d700b69-s4tz5kgz`，代码基线为`543a1d7`；它没有被current引用。生产表已就绪，旧站仍运行f01d1fe。HTTPS、实际异机备份、生产账号和内容准备好后，仍须按下述流程从最新main构建和发布，不能手工切换旧候选绕过保护。
-
-迁移和备份工具已在生产执行并核验；新后台代码已合并并在服务器构建候选release，但尚未切换current。用户本轮继续排除HTTPS，因此GitHub自动发布及服务器开关保持关闭。具体已验证范围及候选版本见[验证记录](docs/validation-log.md)。正式上线前按[后台计划](docs/admin-management-plan.md)核实真实域名/证书、服务用户、目录和异机备份。配置示例为`ops/deploy-data.json.example`、`ops/nginx-admin.conf.example`及`ops/systemd-override.conf.example`；默认禁用和占位值必须保留到对应前提有证据，不能直接复制示例后启用。
+临时HTTP+SSH模式使用上节的专用模板和前提；以下HTTPS配置与操作顺序供以后切回HTTPS时参考，不能把TLS/异机前提直接套给当前临时模式。共享的迁移、备份、首次账号与内容入口都必须使用受控生产配置、同一发布锁及明确身份。具体已验证范围见[验证记录](docs/validation-log.md)。
 
 1. 先控制自动发布，固定目标提交和旧schema兼容性。新代码、模板与服务器安装脚本分别核对；安装`deploy.py`时须同时安装同目录`deploy_runtime.py`，该辅助模块不是单独的服务器命令。
 2. uploads放在release之外，应用和部署使用同一实际用户；末级目录0700、图片0600，路径不含符号链接。备份根和副本根均为私有0700目录，彼此及uploads不能重叠；持久目录不能被旧release清理覆盖。备份副本必须另有异机隔离及加密挂载证据；第二路径字节校验本身不能证明这两项。
@@ -301,199 +299,15 @@ python scripts/data_backup.py verify --backup /绝对路径/备份组
 
 本地验证入口：`bash scripts/check.sh`及`bash scripts/test-db.sh`。部署测试需要真实PostgreSQL工具，`PW_REQUIRE_RECOVERY_TESTS=1`禁止静默跳过恢复用例。真实生产TLS、续期、Nginx重载、systemd配置加载和异机恢复未由本地构建证明，具体已验证范围见[验证记录](docs/validation-log.md)。
 
-### IP 上线前手动配置（2026-10-25 实查后）
+### 后续切回 HTTPS
 
-目标地址固定为`https://124.223.69.7`。以下保留完整手动步骤。2026-10-25后续用户已授权助手执行非HTTPS准备，完成项及证据见验证记录同日后续条目，不能再将本轮全部描述为只读。每一步失败即停止，不继续开启发布。无需重建生产库、重设数据库密码或改动开发库。
-
-已落实：服务器端发布禁用、步骤3的目录/权限/UPLOAD_DIR及会话时长、步骤7的安全drop-in、步骤8的部署双文件和禁用保护。ADMIN_ALLOWED_ORIGINS保持未设置，未执行任何HTTPS/Nginx步骤。步骤8的health_url暂保留原http://127.0.0.1；步骤5确实建立8081后再改为http://127.0.0.1:8081。GitHub变量仍未确认。当前配置备份在`/etc/personal-web/nonhttps-prep-20261024T164402Z`；HTTPS修改前仍需另备份Nginx。完整步骤可作后续恢复/核对参考，已完成项不需盲目重做。
-
-**1. 服务器：先暂停发布并保存当前配置。** GitHub仓库Settings → Secrets and variables → Actions → Variables中的`DEPLOY_ENABLED`设为false；本轮未读取到该变量实际值，服务器端开关是已确认开启的。以下只关闭服务器发布开关，不停止网站：
-
-```sh
-sudo install -d -o root -g root -m 0700 /etc/personal-web/prelaunch-20261025
-sudo cp -an /etc/personal-web/app.env /etc/personal-web/prelaunch-20261025/app.env
-sudo cp -an /etc/personal-web/deploy.json /etc/personal-web/prelaunch-20261025/deploy.json
-sudo cp -an /etc/nginx/conf.d/personal-web.conf /etc/personal-web/prelaunch-20261025/personal-web.conf
-sudo python3 - <<'PY'
-import json, os
-from pathlib import Path
-p=Path('/etc/personal-web/deploy.json')
-d=json.loads(p.read_text()); d['enabled']=False
-q=p.with_name('deploy.json.pending')
-q.write_text(json.dumps(d,indent=2)+'\n');q.chmod(0o644);os.replace(q,p)
-print('Server deployment disabled; website unchanged.')
-PY
-flock -n /opt/personal-web-deploy/deploy.lock true
-```
-
-若最后命令失败，说明有发布持锁，先等待该流程结束并核对现状，不并发配置。
-
-**2. Mac：上传已审阅的配置和两个部署文件。** 使用F工作目录，不从旧main/current取文件：
-
-```sh
-PW_F='/Users/rewind/rewind_Workspace/workwork/production/personal-web/.worktrees/admin-phase-f'
-ssh ubuntu@124.223.69.7 'install -d -m 0700 /home/ubuntu/personal-web-f-ops'
-scp "$PW_F/scripts/deploy.py" "$PW_F/scripts/deploy_runtime.py" \
-  "$PW_F/ops/nginx-ip.conf.example" "$PW_F/ops/deploy-data.json.example" \
-  "$PW_F/ops/systemd-override.conf.example" \
-  ubuntu@124.223.69.7:/home/ubuntu/personal-web-f-ops/
-```
-
-该步骤仅上传运维文件，不包含新后台业务代码，也不切换current。
-
-**3. 服务器：建立持久目录和受控配置读取权限。** 实际服务用户为ubuntu。专用组只允许该应用/部署用户加入：
-
-```sh
-sudo install -d -o ubuntu -g ubuntu -m 0755 /var/lib/personal-web
-sudo install -d -o ubuntu -g ubuntu -m 0700 /var/lib/personal-web/uploads
-sudo install -d -o ubuntu -g ubuntu -m 0700 /var/backups/personal-web
-sudo groupadd --system --force personal-web-ops
-sudo usermod -aG personal-web-ops ubuntu
-sudo chown root:personal-web-ops /etc/personal-web/app.env
-sudo chmod 0640 /etc/personal-web/app.env
-sudo chmod 0600 /opt/personal-web-deploy/deploy.lock
-sudo env TERM=xterm nano /etc/personal-web/app.env
-```
-
-保留原APP_ENV/DEBUG/DB_*及密码，只补充或修正以下三项。文件每个键仅一行，不使用export；不把密码发到聊天中：
-
-```dotenv
-UPLOAD_DIR=/var/lib/personal-web/uploads
-ADMIN_ALLOWED_ORIGINS='["https://124.223.69.7"]'
-ADMIN_SESSION_HOURS=8
-```
-
-编辑完成后退出SSH并重新登录，让ubuntu的新组生效。`sudo -u ubuntu test -r /etc/personal-web/app.env`应成功；不打印文件内容。这里使用`TERM=xterm`避免之前Ghostty终端类型导致nano失败。
-
-**4. 服务器及云控制台：准备IP证书。** 腾讯云安全组须允许入站TCP80和443；保留SSH22，不开放数据库5432、后端8000或探针8081。当前UFW未启用，不为此盲目开启。服务器APT候选Certbot4.0不支持该IP方案，改用官方建议的Snap，并确认版本至少5.4：
-
-```sh
-sudo snap install certbot --classic
-sudo /snap/bin/certbot --version
-sudo install -d -o root -g root -m 0755 /var/www/personal-web-acme
-sudo env TERM=xterm nano /etc/nginx/conf.d/personal-web.conf
-```
-
-在现有`server { ... }`内部加入以下location，保留所有原`/trip/`段；此时先不加入443或证书路径：
-
-```nginx
-location ^~ /.well-known/acme-challenge/ {
-    root /var/www/personal-web-acme;
-    default_type text/plain;
-    try_files $uri =404;
-}
-```
-
-```sh
-sudo nginx -t && sudo systemctl reload nginx
-sudo install -d -m 0755 /var/www/personal-web-acme/.well-known/acme-challenge
-printf 'personal-web-acme-ok\n' | sudo tee /var/www/personal-web-acme/.well-known/acme-challenge/check >/dev/null
-curl --fail http://124.223.69.7/.well-known/acme-challenge/check
-```
-
-最后一条应返回personal-web-acme-ok；还需从Mac执行同一curl确认公网可达。然后依次测试、正式申请，在终端按提示填写邮箱和确认条款：
-
-```sh
-sudo /snap/bin/certbot certonly --dry-run --webroot \
-  --webroot-path /var/www/personal-web-acme \
-  --ip-address 124.223.69.7 --preferred-profile shortlived --cert-name personal-web-ip
-sudo /snap/bin/certbot certonly --webroot \
-  --webroot-path /var/www/personal-web-acme \
-  --ip-address 124.223.69.7 --preferred-profile shortlived --cert-name personal-web-ip
-```
-
-IP证书采用shortlived，约160小时有效；必须依赖自动续期。此方案用webroot，不能照搬`certbot --nginx -d IP`。参考[Let's Encrypt IP证书与Certbot官方步骤](https://letsencrypt.org/2026/03/11/shorter-certs-certbot)及[Certbot安装说明](https://eff-certbot.readthedocs.io/en/stable/install.html)。
-
-**5. 服务器：证书存在后才安装完整IP配置。** 新文件按本次实际配置保留旅行助手路由与诊断保护，增加HTTPS、个人网站维护响应、静态404和仅本机8081探针。先查看diff，若原服务器配置在本次检查后又改过，应合并差异而非直接覆盖：
-
-```sh
-sudo test -s /etc/letsencrypt/live/personal-web-ip/fullchain.pem
-sudo test -s /etc/letsencrypt/live/personal-web-ip/privkey.pem
-sudo diff -u /etc/nginx/conf.d/personal-web.conf /home/ubuntu/personal-web-f-ops/nginx-ip.conf.example
-# diff返回1代表存在差异，查看并确认后再执行下面两条。
-sudo install -o root -g root -m 0644 /home/ubuntu/personal-web-f-ops/nginx-ip.conf.example /etc/nginx/conf.d/personal-web.conf
-sudo nginx -t && sudo systemctl reload nginx
-curl --fail https://124.223.69.7/api/health
-curl --fail http://127.0.0.1:8081/api/health
-curl --fail http://124.223.69.7/trip/health
-curl --fail https://124.223.69.7/trip/health
-```
-
-必须不用`-k`就能HTTPS成功。新配置仅将个人网站HTTP请求跳转到HTTPS，保留现有旅行助手HTTP路由。若`nginx -t`失败，不reload；可用配置备份回退后重新检查：
-
-```sh
-sudo cp /etc/personal-web/prelaunch-20261025/personal-web.conf /etc/nginx/conf.d/personal-web.conf
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-以上回退只恢复本轮修改前Nginx配置，不恢复数据库或应用代码。
-
-**6. 服务器：配置续期后重载。** Snap通常自带续期调度，仍须检查timer确实存在并启用，不能因安装成功就认为自动续期有效：
-
-```sh
-sudo install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-sudo tee /etc/letsencrypt/renewal-hooks/deploy/20-personal-web-nginx >/dev/null <<'SH'
-#!/bin/sh
-set -e
-/usr/sbin/nginx -t
-/usr/bin/systemctl reload nginx
-SH
-sudo chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/20-personal-web-nginx
-sudo systemctl list-timers --all '*certbot*'
-sudo /snap/bin/certbot renew --cert-name personal-web-ip --dry-run --run-deploy-hooks
-```
-
-必须确认存在下次运行时间且演练成功。若无活动续期timer，先解决调度再继续；6天IP证书不能依赖人工想起时续签。参考[Certbot续期说明](https://eff-certbot.readthedocs.io/en/stable/using.html#renewing-certificates)。
-
-**7. 服务器：合入systemd安全参数并重启现有应用。** 使用zz前缀确保晚于现有override.conf加载。该重启仍使用旧current，不迁移数据库：
-
-```sh
-sudo install -d -m 0755 /etc/systemd/system/fastapi-personal-web.service.d
-sudo install -o root -g root -m 0644 \
-  /home/ubuntu/personal-web-f-ops/systemd-override.conf.example \
-  /etc/systemd/system/fastapi-personal-web.service.d/zz-production-safety.conf
-sudo systemctl daemon-reload
-sudo systemctl restart fastapi-personal-web
-sudo systemctl is-active fastapi-personal-web
-curl --fail https://124.223.69.7/api/health
-```
-
-**8. 服务器：更新部署入口，保持禁用。** 两个文件必须一起安装，保留原仓库、镜像和工具配置：
-
-```sh
-sudo install -o root -g root -m 0644 /home/ubuntu/personal-web-f-ops/deploy.py /usr/local/lib/personal-web/deploy.py
-sudo install -o root -g root -m 0644 /home/ubuntu/personal-web-f-ops/deploy_runtime.py /usr/local/lib/personal-web/deploy_runtime.py
-sudo python3 - <<'PY'
-import json, os
-from pathlib import Path
-p=Path('/etc/personal-web/deploy.json');d=json.loads(p.read_text())
-t=json.loads(Path('/home/ubuntu/personal-web-f-ops/deploy-data.json.example').read_text())
-d.update(enabled=False,health_url=t['health_url'],health_host=t['health_host'],data_safety=t['data_safety'])
-q=p.with_name('deploy.json.pending');q.write_text(json.dumps(d,indent=2)+'\n')
-q.chmod(0o644);os.replace(q,p)
-print('Installed data-safety configuration; deployment remains disabled.')
-PY
-```
-
-此时`replica_root`为空、`data_safety.enabled=false`、所有prerequisites为false是正确的准备状态。不要为让命令通过而全部改true。
-
-**9. 停止点：异机备份、恢复演练及新版本发布另行落实。** 未发现专用异机备份挂载，也未得到实际目的地。助手已新增当前无业务表生产库的同机基线备份，并在独立PG18.6临时实例恢复通过；后续已在Mac保存单次AES-256加密副本并从解密内容恢复通过；持续备份及服务器可用的异机挂载仍未配置，因此不能填写虚构的挂载凭据/命令。需要一个实际的加密异机存储或挂载方案；同机另一目录及旧first-deploy备份都不能替代。确定后先验证挂载，再创建子目录，避免挂载失效时退回系统盘：
-
-```sh
-# 仅在真实异机存储已经挂载到该路径后使用。
-mountpoint -q /mnt/personal-web-backup && \
-  sudo install -d -o ubuntu -g ubuntu -m 0700 /mnt/personal-web-backup/personal-web
-```
-
-随后将`replica_root`填为真实私有目录，并完成成套备份及隔离恢复演练，确认容量/耗时、旧schema兼容和全部写入者均受控，才逐项确认prerequisites。2026-10-25生产已独立完成001—003迁移，现有12张表和10项默认工具，尚无管理员/项目/资料/图片/访问数据。迁移工具暂存于`/home/ubuntu/personal-web-migrations/ad51bab`，当前current仍是旧f01d1fe，不要对旧current运行新模块。后续发布须验证目标release与现有schema校验和，再按保护流程处理任何新增迁移后才切换；生产管理员由用户TTY初始化，网站资料和旅行助手内容还须明确录入方案。开发初始化命令仍不能用于生产，不复制开发库/账号/会话/统计。
-
-001—003及迁移后Mac快照恢复已通过；持续备份、新代码CI、生产内容及发布材料全部准备好后，才按单独发布授权打开服务器和GitHub开关。步骤1—8只是服务器配套准备，不代表生产上线或任务8验收完成。
+当前按用户取舍运行HTTP前台和SSH后台。将来具备证书与异机备份条件后，按HTTPS模板重新核对Nginx/续期与发布前提，同时将PRODUCTION_MODE改为https、可信管理来源改为实际HTTPS地址，更新PUBLIC_ORIGIN与部署配置。先验证再切换，不能把临时模式的同机副本标成异机备份。此前完整手动步骤已移至[部署归档](docs/archive/2026-10-21-auto-deployment-plan.md)，其中历史版本与状态须重新实查。
 
 ### Mac 加密备份的读取
 
-2026-10-25生产001—003迁移完成后，最新恢复点已更新为迁移后快照，包含12张表和10项默认工具配置。它仍无管理员、项目、资料、图片或访问记录；以后真实内容有变化时需另取新备份，不能把当前快照当作长期最新恢复点。原空库基线、迁移前及迁移后副本均保留，按各自回执区分，不能混用。
+Mac目前保留的是生产001—003迁移完成后、真实内容录入前的加密快照，含12张表和10项默认工具，无账号/项目/资料/图片/访问记录。它不是现生产最新恢复点；本轮内容录入及切换前的新备份保存在服务器同机备份目录。原空库基线、迁移前及迁移后Mac副本保留，按回执区分，不能用旧快照覆盖新业务数据。
 
-最新迁移后映像位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.dmg`，配对口令文件位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.key`。文件及回执均在Git外，目录0700、文件0600；口令文件不要放进映像或提交到Git。它是解密口令文件，不是证书私钥。
+此前迁移后映像位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.dmg`，配对口令文件位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/postmigration-2026-10-25T072524267894Z-f01d1fe704f9-7f29ea1195d3.key`。文件及回执均在Git外，目录0700、文件0600；口令文件不要放进映像或提交到Git。它是解密口令文件，不是证书私钥。
 
 在Mac终端只读打开，无需显示或粘贴口令：
 
