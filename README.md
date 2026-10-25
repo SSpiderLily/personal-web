@@ -439,7 +439,7 @@ PY
 
 此时`replica_root`为空、`data_safety.enabled=false`、所有prerequisites为false是正确的准备状态。不要为让命令通过而全部改true。
 
-**9. 停止点：异机备份、恢复演练及新版本发布另行落实。** 未发现专用异机备份挂载，也未得到实际目的地。助手已新增当前无业务表生产库的同机基线备份，并在独立PG18.6临时实例恢复通过；尚无异机副本或持续备份，因此不能填写真实挂载凭据/命令。需要一个实际的加密异机存储或挂载方案；同机另一目录及旧first-deploy备份都不能替代。确定后先验证挂载，再创建子目录，避免挂载失效时退回系统盘：
+**9. 停止点：异机备份、恢复演练及新版本发布另行落实。** 未发现专用异机备份挂载，也未得到实际目的地。助手已新增当前无业务表生产库的同机基线备份，并在独立PG18.6临时实例恢复通过；后续已在Mac保存单次AES-256加密副本并从解密内容恢复通过；持续备份及服务器可用的异机挂载仍未配置，因此不能填写虚构的挂载凭据/命令。需要一个实际的加密异机存储或挂载方案；同机另一目录及旧first-deploy备份都不能替代。确定后先验证挂载，再创建子目录，避免挂载失效时退回系统盘：
 
 ```sh
 # 仅在真实异机存储已经挂载到该路径后使用。
@@ -450,6 +450,27 @@ mountpoint -q /mnt/personal-web-backup && \
 随后将`replica_root`填为真实私有目录，并完成成套备份及隔离恢复演练，确认容量/耗时、旧schema兼容和全部写入者均受控，才逐项确认prerequisites。当前生产没有业务表/管理员/内容，新后台代码也尚未发布；不要对当前current运行`app.production_migrate`或`app.production_admin_init`，这些模块尚不存在。下一次发布必须先准备目标新release及备份、受保护迁移，再切换；生产管理员由用户TTY初始化，网站资料和旅行助手内容还须明确录入方案。开发初始化命令仍不能用于生产，不复制开发库/账号/会话/统计。
 
 恢复演练、新代码CI、生产内容及发布材料全部准备好后，才按单独发布授权打开服务器和GitHub开关。步骤1—8只是服务器配套准备，不代表生产上线或任务8验收完成。
+
+### Mac 加密基线备份的读取
+
+用户再次明确授权后，2026-10-25已完成当前生产基线的Mac加密副本和端到端恢复验证。此备份对应旧f01d1fe、业务表0、图片0；持续异机备份和以后有业务数据时的恢复仍需另行落实，不能用旧基线覆盖新数据。
+
+加密映像位于`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/baseline-20261024T164646Z.dmg`，解密材料单独保存在同级production/keys目录，验证回执在backups内。它们均在Git外；目录0700、文件0600。解密材料不要放进备份映像或提交到仓库，保留映像时也须保留对应key文件。key文件是解密口令文件，不是证书私钥。
+
+在Mac终端只读打开，无需将口令显示或粘贴到聊天：
+
+```sh
+PW_BACKUP='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/backups/baseline-20261024T164646Z.dmg'
+PW_KEY='/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/keys/baseline-20261024T164646Z.key'
+PW_MOUNT="$(mktemp -d /private/tmp/pw-backup-read-XXXXXX)"
+hdiutil attach -readonly -nobrowse -stdinpass -mountpoint "$PW_MOUNT" "$PW_BACKUP" < "$PW_KEY"
+ls -l "$PW_MOUNT"
+# 查看/复制所需备份文件后，卸载并移除本次空挂载目录。
+hdiutil detach "$PW_MOUNT"
+rmdir "$PW_MOUNT"
+```
+
+映像内有database.dump、uploads.tar、baseline-manifest.json。dump由PostgreSQL18.6生成，恢复时使用兼容的18.6工具及独立目标；不要向生产/开发库直接执行pg_restore。验证范围和映像摘要只维护在[验证记录](docs/validation-log.md)及Git外回执中。
 
 ## 文档维护
 

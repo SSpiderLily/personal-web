@@ -330,3 +330,19 @@ E开发预览收尾：初次GET收尾出现代理502，直连确认8010与15432�
 未完成及审核边界：计划把基线复制到用户Mac并使用hdiutil生成AES256映像和独立解密材料；两次自动权限审核均超时拒绝创建进程，操作未执行。中间一次仅重试了尚未生成的临时脚本，返回文件不存在，无备份动作；临时脚本补齐后仍审核超时，停止进一步重试。本地没有生成加密副本/密钥，也不能声称已有异机备份。这是审核超时，不是对操作安全性的否定。现仅有服务器同机、当前无业务表的基线与已验证恢复；自动异机备份、生产迁移、HTTPS及新代码发布仍待完成。
 
 README已标记可跳过的已执行步骤及health_url保留理由，唯一计划/INDEX同步；本轮不重跑未变动业务代码测试，采用真实服务/权限/摘要/恢复验证。未fetch/push/main合并，原根目录.env.example外部差异保持0564b4ac99f5a422b0245ea40ed3c28ed8dc3def153e7eef4111977839f985cf，不纳入提交。
+
+
+## 2026-10-25：再次授权后 Mac 加密备份及端到端恢复验证
+
+用户明确授权将加密备份保存到Mac并检查可用性，本轮执行获准成功，替代上轮“审核超时未生成”的当前状态。先重新只读核对服务器baseline-20261024T164646Z的原dump/空上传归档SHA256及restore_tested=true，再通过现有主机指纹校验SSH/SCP下载到0700临时目录，没有读取或输出生产密码/会话内容。
+
+保存结果：Git外`production/.personal-web-data/production/backups/baseline-20261024T164646Z.dmg`，141312字节，hdiutil AES-256加密；独立随机口令文件位于同级production/keys/baseline-20261024T164646Z.key，口令通过stdin提供给hdiutil，未输出、未放环境变量/命令参数/映像或Git。验证回执为同一backups目录中的baseline-20261024T164646Z-receipt.json。持久目录均0700，映像、口令和回执均0600且由当前用户拥有。映像SHA256：3b3a2404fd22fcf8a471df3db28f8beffd47d0adb54c91a58f804fa1046794d8。
+
+可用性验证：
+
+- hdiutil verify通过，isencrypted确认encrypted:YES；只读挂载解密，database.dump与uploads.tar摘要逐项匹配服务器原manifest，manifest内容一致。
+- 从Mac映像的实际解密挂载中复制3个备份文件回服务器私有临时目录/var/tmp/pw-mac-restore-*；在独立新PG18.6集群（Unix socket、端口25435、listen_addresses为空）中以personal_web_test恢复到personal_web_test_mac_restore，pg_restore单事务成功；实际数据库/账号符合测试目标，业务表0和图片0符合该旧基线，耗时1.017秒。不是复用服务器原始dump作恢复测试，也未覆盖生产/开发库。
+- finally停止并清理临时集群及回传明文；最终服务器该前缀临时目录0，Mac临时明文目录已删除、映像已卸载；映像/口令/回执保留。最终再核对映像摘要及0600权限均正确。
+- 生产服务active、原REVISION仍f01d1fe704f92dde35431041f89f67be6703c8aa，health为ok。本轮未修改生产schema、HTTPS、账号、配置或发布开关。
+
+验证仅覆盖当前无业务表/图片的基线，一次性Mac异机副本已可用；未配置持续异机复制或自动备份，不能据此将服务器replica挂载/TLS/完整恢复前提改true。README读取方式、唯一计划当前状态及INDEX同步；没有业务代码变更，不重跑不相关业务测试；未push/main合并，整体仍7/8。
