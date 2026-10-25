@@ -215,6 +215,8 @@ GitHub `production` 环境限制 main；变量为 `DEPLOY_HOST`、`DEPLOY_USER`�
 
 ### 阶段 F 生产工具与操作顺序
 
+本轮含修复的候选已安装到`/opt/personal-web-deploy/releases/543a1d700b69-s4tz5kgz`，代码基线为`543a1d7`；它没有被current引用。生产表已就绪，旧站仍运行f01d1fe。HTTPS、实际异机备份、生产账号和内容准备好后，仍须按下述流程从最新main构建和发布，不能手工切换旧候选绕过保护。
+
 迁移和备份工具已在生产执行并核验；新后台代码已合并并在服务器构建候选release，但尚未切换current。用户本轮继续排除HTTPS，因此GitHub自动发布及服务器开关保持关闭。具体已验证范围及候选版本见[验证记录](docs/validation-log.md)。正式上线前按[后台计划](docs/admin-management-plan.md)核实真实域名/证书、服务用户、目录和异机备份。配置示例为`ops/deploy-data.json.example`、`ops/nginx-admin.conf.example`及`ops/systemd-override.conf.example`；默认禁用和占位值必须保留到对应前提有证据，不能直接复制示例后启用。
 
 1. 先控制自动发布，固定目标提交和旧schema兼容性。新代码、模板与服务器安装脚本分别核对；安装`deploy.py`时须同时安装同目录`deploy_runtime.py`，该辅助模块不是单独的服务器命令。
