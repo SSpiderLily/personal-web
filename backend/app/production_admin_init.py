@@ -12,10 +12,13 @@ from app import database, migrate
 from app.admin_init import _credential_hash
 from app.production_migrate import snapshot
 from app.production_ops import parser, release_lock, validate_target, verify_identity
-from app.settings import get_settings
+from app.settings import get_settings, validate_http_ssh_origins
 
 
 def _origins(settings):
+    if settings.production_mode == 'http_ssh':
+        validate_http_ssh_origins(settings.public_origin, settings.admin_allowed_origins)
+        return
     if not settings.admin_allowed_origins:
         raise ValueError('Trusted HTTPS administrator origins are required.')
     for origin in settings.admin_allowed_origins:

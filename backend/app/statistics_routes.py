@@ -14,7 +14,7 @@ router = APIRouter(prefix='/api/admin', route_class=AdminRoute)
 
 
 @router.post('/visits')
-async def collect_visit(request: Request, settings: Settings = Depends(auth.require_write_origin)):
+async def collect_visit(request: Request, settings: Settings = Depends(auth.require_visit_origin)):
     value = await json_object(request)
     kind = value.get('kind')
     project_id = value.get('project_id')
@@ -32,7 +32,7 @@ async def collect_visit(request: Request, settings: Settings = Depends(auth.requ
     response = JSONResponse({'recorded': recorded})
     if recorded and fresh:
         response.set_cookie(visitors.COOKIE, str(visitor), max_age=visitors.COOKIE_MAX_AGE,
-                            path=visitors.COOKIE_PATH, secure=settings.app_env == 'production',
+                            path=visitors.COOKIE_PATH, secure=auth.secure_cookie(settings),
                             httponly=True, samesite='strict')
     return response
 

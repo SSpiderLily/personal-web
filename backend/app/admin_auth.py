@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
 import hmac
+from ipaddress import ip_address
 import re
 import secrets
 
@@ -50,10 +51,20 @@ def check_admin_access(request: Request, settings: Settings = Depends(get_settin
         if not settings.admin_allowed_origins:
             raise unavailable()
         origin = f'{request.url.scheme}://{request.url.netloc}'
-        if request.url.scheme != 'https' or origin not in settings.admin_allowed_origins:
+        if settings.production_mode == 'http_ssh':
+            try:
+                loopback = request.client is not None and ip_address(request.client.host).is_loopback
+            except ValueError:
+                loopback = False
+            allowed = request.url.scheme == 'http' and loopback
+        else:
+            allowed = request.url.scheme == 'https'
+        if not allowed or origin not in settings.admin_allowed_origins:
             raise AdminError(403, 'origin_forbidden', '此来源不能访问管理服务。')
     origin_header = request.headers.get('origin')
-    if origin_header is not None and origin_header not in settings.admin_allowed_origins:
+    if origin_header is not None and (origin_header not in settings.admin_allowed_origins
+            or (settings.app_env == 'production' and settings.production_mode == 'http_ssh'
+                and origin_header != f'{request.url.scheme}://{request.url.netloc}')):
         raise AdminError(403, 'origin_forbidden', '此来源不能访问管理服务。')
     return settings
 
@@ -65,6 +76,26 @@ def require_write_origin(request: Request, settings: Settings = Depends(check_ad
     if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
         raise invalid_request()
     return settings
+
+
+def require_visit_origin(request: Request, settings: Settings = Depends(get_settings)) -> Settings:
+    """Anonymous visits have their own public origin; this grants no admin access."""
+    if settings.app_env != 'production' or settings.production_mode != 'http_ssh':
+        return require_write_origin(request, check_admin_access(request, settings))
+    origin = f'{request.url.scheme}://{request.url.netloc}'
+    if origin != settings.public_origin or request.headers.get('origin') != settings.public_origin:
+        check_admin_access(request, settings)
+        if request.headers.get('origin') != origin:
+            raise AdminError(403, 'origin_forbidden', '此来源不能记录访问。')
+    if request.headers.get('x-admin-request') != '1':
+        raise AdminError(403, 'origin_forbidden', '此来源不能记录访问。')
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise invalid_request()
+    return settings
+
+
+def secure_cookie(settings: Settings) -> bool:
+    return settings.app_env == 'production' and settings.production_mode != 'http_ssh'
 
 
 def token_digest(token: str | None) -> bytes | None:
