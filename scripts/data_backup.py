@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -222,10 +223,24 @@ def credential_environment(settings):
 
 def pg_run(binary, settings, arguments):
     with credential_environment(settings) as env:
-        completed = subprocess.run([str(binary), '--host', settings.db_host, '--port', str(settings.db_port),
-                                    '--username', settings.db_user, '--no-password', *arguments], env=env,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
-    require(completed.returncode == 0, 'PostgreSQL backup/restore command failed; driver output suppressed')
+        process = None
+        try:
+            # Defer Ctrl-C until the child handle is assigned. Otherwise an
+            # interrupt inside Popen can orphan a live dump/restore process.
+            previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+            try:
+                process = subprocess.Popen([str(binary), '--host', settings.db_host, '--port', str(settings.db_port),
+                                            '--username', settings.db_user, '--no-password', *arguments], env=env,
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            finally:
+                signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+            returncode = process.wait(timeout=600)
+        except BaseException:
+            if process is not None:
+                process.kill()
+                process.wait()
+            raise
+    require(returncode == 0, 'PostgreSQL backup/restore command failed; driver output suppressed')
 
 
 def write_private(path, data):

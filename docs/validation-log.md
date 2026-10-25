@@ -387,3 +387,16 @@ README已标记可跳过的已执行步骤及health_url保留理由，唯一计�
 用户随后明确同意将代码和现有部署记录推送至公开仓库SSpiderLily/personal-web，自动审批所缺的具体远端及数据范围授权已补齐；同时确认继续排除HTTPS，先完成其他部署准备。GitHub变量接口未由现有连接器提供；浏览器设置页面加载超时，未修改仓库变量。服务器部署开关保持false，保证main合并不能绕过TLS保护。
 
 服务器补测：后端第一次从仓库根启动导致app导入失败；按scripts/check.sh规定改到backend后194项发现通过（91项待隔离实例，本日已另跑165项PG18专项）。恢复专项首次在Ubuntu重现FileNotFoundError：两处TemporaryDirectory写死/private/tmp，27项普通部署测试运行、恢复测试类无法启动。最小改/tmp后Ubuntu54项通过，但Mac因/tmp为符号链接触发现有安全校验，20项失败。最终统一为Path('/tmp').resolve()，不修改业务代码/备份安全校验；Mac54项全部通过，最终Ubuntu54项复验通过。暂存目录只上传了该测试文件进行补测，迁移SQL及运行代码未改；原ad51bab.tar摘要仍只指原始Git archive，不能用来代表补测后的整个暂存目录。
+
+
+## 2026-10-25：PR10合并、服务器候选与中断竞态修复
+
+PR10：https://github.com/SSpiderLily/personal-web/pull/10，head4784cf04338d59df4709e7d8c3b0e9df1c10ae4b；PR CI40173954117的Python3.13/3.14全部success，deploy skipped。独立差异审查无Critical/Important。显式校验head后merge为d3bc249ca417e38480d20fd7d17a81139ce12a5f，本地F已快进。用户已明确允许运维记录公开，原自动审批阻碍解除；无密码/密钥/备份内容提交。
+
+GitHub连接器不提供Actions变量管理；浏览器设置页加载超时且未修改，随后用git credential helper的正常现有认证直接访问该仓库Actions变量API，仅输出DEPLOY_ENABLED从true变false的回读结果，认证信息未打印/保存/放入命令参数。正式切换仍禁用，不更改HTTPS。
+
+持同一0600发布锁，调用安装版fetch/prepare，仅准备准确main d3bc249到/opt/personal-web-deploy/releases/d3bc249ca417-ve9908eb。Node22.22.1/uv0.12.3/Python3.14.4，26项生产依赖按锁文件及哈希安装，npm ci及生产构建通过，Gunicorn配置通过，无backend/.env。真实生产配置只读迁移pending空、readiness.ready=true/admin_initialized=false/images0；旧current f01d1fe、旧站健康、两个发布开关false。回执/home/ubuntu/personal-web-migrations/prepared-release-d3bc249ca417.json。
+
+该候选临时双worker仅监听随机本机端口，以实际production环境读取真实生产库：health/profile/projects/tools200，骰子范围1—6，admin/session503符合缺少来源/TLS时关闭预期；Nginx用户可读前端index。项目仍空，未制造内容/账号/会话/统计；临时进程组已停止，未操作systemd/current/Nginx。回执prepared-release-smoke.json，日志prepared-release-smoke.log均私有。
+
+main CI40174116758：Python3.13成功，Python3.14在test_interrupt_cleans_incomplete_staging_and_pgpass失败，断言子进程PID应不存在却仍存在；不是依赖下载问题，未只做重试。新test_data_backup_process确定性在Popen已生成自有sleep子进程、尚未返回句柄时发送SIGINT，原实现稳定失败（child仍运行），新实现通过。pg_run用pthread_sigmask在Popen赋值期间延迟SIGINT，在恢复原掩码后的中断/超时/异常中kill+wait，再退出PGPASSFILE上下文，保持600秒超时和输出隐藏。Mac55项通过；Ubuntu55项完整复验通过。独立限定复审无Critical/Important。候选d3bc249尚不含此修复，最终准备版本须另行记录。
