@@ -445,3 +445,10 @@ Mac通过真实公网请求验证health200、/admin及/api/admin/session404，�
 应用内浏览器连接超时，改用Playwright受控headed浏览器：1440×1000桌面、390×844手机、项目详情/真实封面、骰子动画结束显示6点、SSH后台登录表单均通过；手机horizontalOverflow=false、图片均loaded。正常页面浏览产生实际匿名统计，最新只读时网站记录2/项目记录1（不是导入开发记录）；后续随访问变化。截图与快照移到Git外私有`/Users/rewind/rewind_Workspace/workwork/production/.personal-web-data/production/verification/http-ssh-20261025`，无账号密码录屏或存储快照。
 
 正式进程核验：systemd active，master1592537及两个worker1592539/1592540为当时时点；/proc白名单确认APP_ENV=production、DEBUG=false、PRODUCTION_MODE=http_ssh、PUBLIC_ORIGIN为公网IP、ADMIN_ALLOWED_ORIGINS仅127.0.0.1:18880、DB_NAME/USER=personal_web_prod、持久UPLOAD_DIR正确。只读实际库12表、001—003无待项、项目1/说明3/资料1/图片1/工具10，开发/生产CONNECT双向false。当前管理员/会话0，已给用户真实TTY命令并异步等待初始化结果，未代设密码或复制开发账号；初始化后还需真实登录确认及补充含账号状态备份，所以任务8与整计划不标完成、不归档。后续HTTPS/异机为用户延期选择，不是本轮上线阻碍。README中过时空库/旧候选描述已纠正，旧HTTPS独有步骤迁移到既有归档并标为历史，INDEX已同步。
+
+
+## 2026-10-25：管理员延期与文档合并授权
+
+用户明确决定暂不初始化生产管理员，由用户最后手动收尾；本轮不创建账号、不修改生产配置或业务数据。README补全SSH登录服务器、真实TTY初始化成功标志、Mac隧道、登录/刷新/退出及后续账号核验和同机备份流程。任务8仍待这些收尾验收，计划保持7/8，不归档。
+
+用户明确允许合并仅含文档的PR14，并撤销早先“暂不合并发布”限制。本轮将更新后的同一文档PR交由CI检查，检查通过后合并；该授权不要求再次部署，生产继续使用已验收的9ccdc94。

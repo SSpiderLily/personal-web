@@ -181,7 +181,7 @@ ssh -NT -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=yes \
 
 只使用127.0.0.1及固定18880端口，不换成localhost、局域网地址或公网IP；SSH断开后后台不可达。若端口已占用，先确认是否是自己已有的同一隧道，不盲目结束进程。管理Cookie仅在这个显式模式去掉Secure，仍为HttpOnly、SameSite=Strict及原路径；账号、会话、CSRF与上传校验保留。登录后通过隧道地址预览前台可排除管理员访问；另开公网IP属于另一个Cookie来源，会按匿名浏览器计数。
 
-生产首个管理员在服务器真实终端初始化，不把密码放入命令或聊天：
+生产管理员按用户决定暂不初始化，不影响已上线的公开前台。最后收尾时，先在Mac终端运行`ssh ubuntu@124.223.69.7`，然后在服务器真实终端执行以下命令，不把密码放入命令或聊天：
 
 ```sh
 sudo systemd-run --unit=personal-web-admin-init --pty --wait --collect \
@@ -194,7 +194,7 @@ sudo systemd-run --unit=personal-web-admin-init --pty --wait --collect \
   --lock-file /opt/personal-web-deploy/deploy.lock
 ```
 
-按提示输入用户名和两次12—128字符密码。已有账号时拒绝覆盖；初始化后通过上述隧道登录。生产内容使用独立入口`python -m app.production_content_init --expect-database personal_web_prod --expect-user personal_web_prod`只读预检；仅在持锁停写且已备份时追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`录入版本控制中的真实旅行助手、介绍和图片。它不会导入开发库或覆盖已有内容；原开发bootstrap继续拒绝生产。
+按提示输入用户名和两次12—128字符密码，成功结果包含`"initialized":true`。已有账号时拒绝覆盖；初始化后在另一个Mac终端运行上述隧道命令，通过固定后台地址登录，检查刷新和退出。完成后只需告知初始化结果，再核验账号/会话并补充一份含账号状态的同机备份，不发送密码。生产内容使用独立入口`python -m app.production_content_init --expect-database personal_web_prod --expect-user personal_web_prod`只读预检；仅在持锁停写且已备份时追加`--execute --lock-file /opt/personal-web-deploy/deploy.lock`录入版本控制中的真实旅行助手、介绍和图片。它不会导入开发库或覆盖已有内容；原开发bootstrap继续拒绝生产。
 
 同机成套备份保存在`/var/backups/personal-web`，校验副本在`/var/backups/personal-web-mirror`，均为私有目录，每次发布前停写创建并校验。两份都在同一服务器，不能抵御整机损毁；本轮按用户明确取舍不要求异机备份。发布仍使用原持锁、备份、迁移、维护、健康和数据核验及代码回退流程，不自动恢复数据库。恢复演练使用独立空测试实例，不能向生产库直接试恢复。
 
