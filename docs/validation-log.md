@@ -311,3 +311,22 @@ E开发预览收尾：初次GET收尾出现代理502，直连确认8010与15432�
 交接更新：README集中列出9步手动命令和停止点；本地ops/nginx-ip.conf.example按实查保留原trip路由，补HTTPS/ACME/维护/私有探针；发布JSON例子使用固定IP，replica_root留空，全部发布和前提开关仍为false。唯一计划及INDEX同步。新配置仅做本地静态检查，未上传/执行或用生产nginx -t验证；旧配置通过不代表新配置已验收。生产迁移/首次账号/内容/备份恢复与新代码发布仍未实施，本轮不重跑业务测试、不把整个阶段F计为完成。
 
 参考：[Let's Encrypt IP证书和Certbot步骤](https://letsencrypt.org/2026/03/11/shorter-certs-certbot)、[Certbot安装](https://eff-certbot.readthedocs.io/en/stable/install.html)、[续期](https://eff-certbot.readthedocs.io/en/stable/using.html#renewing-certificates)、[systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)。
+
+
+## 2026-10-25：授权执行非HTTPS生产准备与当前空库基线恢复
+
+授权：用户确认HTTPS以外可代做。本轮不再只读，实际执行服务器配套；没有操作证书、Nginx或443，没有部署新应用、迁移业务表、创建管理员或修改开发数据。
+
+执行及证据：
+
+- 先核对current仍f01d1fe，服务ubuntu/双worker；原app.env与运行进程的APP_ENV/DEBUG/DB_*逐项比对（密码仅内存比较、从不输出）一致。持有同一deploy.lock时，将原app.env/deploy.json/deploy.py/override.conf复制到root0700目录`/etc/personal-web/nonhttps-prep-20261024T164402Z`。目录名为UTC时间，对应北京时间2026-10-25。发布配置原仓库/镜像/工具参数保留，服务器enabled=false，新data_safety.enabled=false、replica_root为空、前提项全部false；health_url保留原http://127.0.0.1，未指向尚不存在的8081。
+- 建立ubuntu:ubuntu的/var/lib/personal-web0755、其uploads0700及/var/backups/personal-web0700；发布锁ubuntu:ubuntu0600。app.env改为root:personal-web-ops0640，仅将ubuntu加入专用组。新SSH会话以实际ubuntu用户通过deploy_runtime.private_environment读取/解析成功，未打印密码。配置只增加UPLOAD_DIR和ADMIN_SESSION_HOURS=8；ADMIN_ALLOWED_ORIGINS仍未设置；原数据库参数/密码不变。
+- 安装root拥有0644的deploy.py和deploy_runtime.py，服务器摘要分别79f42455f90d405de7018b26ddc8e93af0edaaeb148eb5265134d05bb2f57c33和4fcd58e869261290589e1f7ad3921a5a697e508003b3670e68e93419a3b17937，与本地已审查代码一致。实际调用data_config确认因关闭的data_safety拒绝部署，未调用--execute。
+- 安装zz-production-safety.conf，位于旧override.conf之后；Gunicorn --check-config通过，daemon-reload及旧版本重启成功。实际进程确认UMask0077、KillModecontrol-group、ExecStart含--forwarded-allow-ips=127.0.0.1，UPLOAD_DIR与8小时会话配置已加载；最终主进程1317649、两个worker1317650/1317651为该时点。restart刚返回时一次curl连接尚未就绪，重试后200；不把短暂启动连接失败视为最终健康。
+- 创建`/var/backups/personal-web/baseline-20261024T164646Z`0700，内有database.dump、uploads.tar、baseline-manifest.json，各0600。持锁短暂停止现有worker，确认inactive、无其他生产会话、public业务表0及图片0；用现有生产角色PG18.6只读dump，PGPASSFILE私有且finally删除，finally恢复原服务并探测健康。数据库dump SHA256为c358287d85ba70aea1e656dcd5f14436cd5f1b91499770b467a405c0729328bd，空上传归档为84ff92691f909a05b224e1c56abb4864f01b4f8e3c854e4bb4c7baf1d3f6d652。
+- 同机另建PG18.6临时集群/var/tmp/pw-restore-*，仅Unix socket、端口25434、listen_addresses为空；恢复到personal_web_test_restore、账号personal_web_test，pg_restore单事务成功，身份及业务表0符合基线，耗时1.111秒。finally停止临时集群并删除该自有目录；生产/开发库未被恢复或清空。基线manifest标注restore_tested=true、offsite_copy=false，未将此旧空库恢复等同新后台有数据的恢复验收。
+- 最终原REVISION保持f01d1fe704f92dde35431041f89f67be6703c8aa；Nginx侧/api/health、/trip/health及/__release.txt均200，仍无443监听。全过程没有Nginx命令变更/重载或HTTPS配置。新服务实际环境的生产身份/密码与受控原备份再次比较一致。
+
+未完成及审核边界：计划把基线复制到用户Mac并使用hdiutil生成AES256映像和独立解密材料；两次自动权限审核均超时拒绝创建进程，操作未执行。中间一次仅重试了尚未生成的临时脚本，返回文件不存在，无备份动作；临时脚本补齐后仍审核超时，停止进一步重试。本地没有生成加密副本/密钥，也不能声称已有异机备份。这是审核超时，不是对操作安全性的否定。现仅有服务器同机、当前无业务表的基线与已验证恢复；自动异机备份、生产迁移、HTTPS及新代码发布仍待完成。
+
+README已标记可跳过的已执行步骤及health_url保留理由，唯一计划/INDEX同步；本轮不重跑未变动业务代码测试，采用真实服务/权限/摘要/恢复验证。未fetch/push/main合并，原根目录.env.example外部差异保持0564b4ac99f5a422b0245ea40ed3c28ed8dc3def153e7eef4111977839f985cf，不纳入提交。
