@@ -1,6 +1,10 @@
 # Merge with existing service via a drop-in during separately authorized setup.
 [Service]
+EnvironmentFile=/etc/personal-web/app.env
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=30
 User=ubuntu
 WorkingDirectory=/opt/personal-web-deploy/current/backend
 ExecStart=
-ExecStart=/opt/personal-web-deploy/current/backend/.venv/bin/gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000
+ExecStart=/opt/personal-web-deploy/current/backend/.venv/bin/gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000 --forwarded-allow-ips=127.0.0.1

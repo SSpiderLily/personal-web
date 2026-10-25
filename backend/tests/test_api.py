@@ -21,12 +21,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
     def test_profile_contract(self):
-        response = self.client.get("/api/profile")
+        data = {'name':'', 'title':'', 'introduction':'', 'skills':[], 'avatar_file_id':None, 'contacts':[], 'social_links':[]}
+        with patch('app.profile.load_profile', return_value=data), patch('app.projects.list_published', return_value=[]):
+            response = self.client.get("/api/profile")
         self.assertEqual(response.status_code, 200)
         profile = response.json()
         for field in ("name", "title", "introduction"):
             self.assertIsInstance(profile[field], str)
-            self.assertTrue(profile[field].strip())
+        self.assertEqual(profile["name"], "")
         self.assertIsInstance(profile["skills"], list)
         self.assertTrue(all(isinstance(skill, str) for skill in profile["skills"]))
         self.assertIsInstance(profile["projects"], list)

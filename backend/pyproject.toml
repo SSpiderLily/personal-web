@@ -7,6 +7,10 @@ dependencies = [
     "uvicorn>=0.34,<1",
     "gunicorn==26.2.0",
     "pydantic-settings>=2,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pwdlib[argon2]>=0.3,<1",
+    "Pillow>=12,<13",
+    "python-multipart>=0.0.22,<1",
 ]
 
 [dependency-groups]

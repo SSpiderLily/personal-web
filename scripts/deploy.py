@@ -7,11 +7,15 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import deploy_runtime as data_runtime
 
 
 def run(*args, cwd=None, env=None):
@@ -93,6 +97,11 @@ def fetch(config, cache):
 def prepare(config, root, cache, sha):
     env = os.environ.copy()
     env['PATH'] = config['tool_path'] + ':/usr/bin:/bin'
+    # Build/import validation must never inherit production credentials or select production.
+    for key in list(env):
+        if key.startswith(('DB_', 'PG')) or key in ('APP_ENV','DEBUG','UPLOAD_DIR','ADMIN_ALLOWED_ORIGINS'):
+            env.pop(key)
+    env.update(APP_ENV='test', DEBUG='false')
     # Never inherit frontend production overrides from the SSH login environment.
     for key in list(env):
         if key.startswith(('VITE_', 'UV_', 'PYTHON')) or key in ('VIRTUAL_ENV', 'NODE_ENV', 'NODE_OPTIONS'):
@@ -131,11 +140,84 @@ def prepare(config, root, cache, sha):
     return release
 
 
+
+def preflight_data(config, release):
+    return data_runtime.preflight(config, release)
+
+
+def backup_data(config, release, lock_fd):
+    return data_runtime.backup(config, release, lock_fd)
+
+
+def migrate_data(config, release, lock_fd):
+    return data_runtime.migrate(config, release, lock_fd)
+
+
+def verify_data(config, release, lock_fd):
+    return data_runtime.verify(config, release, lock_fd)
+
+
+def verify_rollback_data(config, release, lock_fd):
+    return data_runtime.verify_rollback(config, release, lock_fd)
+
+
+def maintenance(config, enabled):
+    path = Path(config['data_safety']['maintenance_file'])
+    if enabled:
+        # Exclusive creation avoids clearing another operator's maintenance flag.
+        with path.open('x') as stream:
+            stream.write('personal-web deployment\n')
+        path.chmod(0o644)
+    else:
+        if path.is_symlink():
+            raise RuntimeError('Maintenance marker unexpectedly changed')
+        path.unlink()
+
+
+def stop():
+    run('/usr/bin/sudo', '-n', '/usr/bin/systemctl', 'stop', 'fastapi-personal-web')
+    state = run('/usr/bin/systemctl', 'show', 'fastapi-personal-web', '--property=ActiveState', '--value')
+    if state != 'inactive':
+        raise RuntimeError('All application workers must stop before backup')
+
+
+def activate_data(root, release, config, lock_fd):
+    previous = (root / 'current').resolve(strict=True)
+    old_sha = (previous / 'REVISION').read_text().strip()
+    sha = (release / 'REVISION').read_text().strip()
+    preflight_data(config, release)
+    maintenance(config, True)
+    try:
+        stop()
+        backup_data(config, release, lock_fd)
+        migrate_data(config, release, lock_fd)
+        switch(root, release)
+        restart()
+        wait_healthy(config, sha)
+        verify_data(config, release, lock_fd)
+    except BaseException:
+        # Pending migrations are atomic and applied extensions must remain old-compatible.
+        # Never restore a database or uploads automatically after a code failure.
+        switch(root, previous)
+        restart()
+        wait_healthy(config, old_sha)
+        verify_rollback_data(config, release, lock_fd)
+        maintenance(config, False)
+        raise
+    maintenance(config, False)
+    print('Deployed with verified data safeguards: ' + sha, flush=True)
+
 def deploy(config, sha):
+    data_runtime.data_config(config)
     root = Path(config['root'])
     if not root.is_absolute() or not (root / 'current').is_symlink():
         raise RuntimeError('Initialize a validated current release before enabling deployment')
-    with (root / 'deploy.lock').open('a') as lock:
+    descriptor = os.open(root / 'deploy.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'a') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1:
+            raise RuntimeError('Deployment lock must be an owned single-link regular file')
+        os.fchmod(lock.fileno(), 0o600)
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         current = (root / 'current').resolve(strict=True)
         old_sha = (current / 'REVISION').read_text().strip()
@@ -151,7 +233,7 @@ def deploy(config, sha):
         release = prepare(config, root, cache, sha)
         if fetch(config, cache) != sha:
             raise RuntimeError('main changed during preparation; current release unchanged')
-        activate(root, release, config)
+        activate_data(root, release, config, lock.fileno())
 
 
 def main():
