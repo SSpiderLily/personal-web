@@ -83,3 +83,16 @@ class ProfileIntegrationTests(unittest.TestCase):
             self.assertNotIn('do-not-echo',response.text)
         value=payload() | {'introduction':'文'*10000}
         self.assertEqual(self.client.put('/api/admin/profile',headers=headers,json=value).status_code,200)
+
+
+    def test_about_copy_round_trip_and_legacy_updates_preserve_saved_about(self):
+        headers=self.login()
+        about={'page_title':'关于我','about_body':'新的文案\n\n第二段','current_project_url':'/#/works'}
+        response=self.client.put('/api/admin/profile',headers=headers,json=payload() | {'name':'rewind','about_content':about})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.client.get('/api/profile').json()['about_content'],about)
+        response=self.client.put('/api/admin/profile',headers=headers,json=payload() | {'name':'修改基本资料'})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['about_content'],about)
+        with database.connection() as conn:
+            self.assertEqual(conn.execute('SELECT about_content FROM site_profile WHERE id=1').fetchone()[0],about)

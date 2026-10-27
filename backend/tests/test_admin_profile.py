@@ -58,3 +58,12 @@ class ProfileValidationTests(unittest.TestCase):
                         'http://127.0.0.1:5173/', 'https://[::1]/', 'https://xn--fsqu00a.xn--0zwm56d/路径'):
                 value = payload() | {field: [{'label': '链接', 'url': url}]}
                 self.assertEqual(self.profile.validate_profile(value), value)
+
+
+    def test_optional_about_fields_validate_without_breaking_legacy_payloads(self):
+        value=payload() | {'about_content':{'page_title':'关于我','current_project_url':'/#/works','about_body':'第一段\n\n第二段'}}
+        self.assertEqual(self.profile.validate_profile(value),value)
+        for about in [{'unknown':'x'}, {'page_title':5}, {'about_body':'x'*10001}, {'current_project_url':'javascript:alert(1)'}, {'current_project_url':'//evil.example'}, {'current_project_url':'/#/works%0a'}]:
+            with self.subTest(about=about),self.assertRaises(auth.AdminError):
+                self.profile.validate_profile(payload() | {'about_content':about})
+        self.assertEqual(self.profile.validate_profile(payload()),payload())

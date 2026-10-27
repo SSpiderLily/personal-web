@@ -103,6 +103,6 @@ class ProductionAdminDatabaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.initialize(execute=True, lock_file=self.lock, username='owner', password='short')
         with database.transaction() as conn:
-            conn.execute("DELETE FROM schema_migrations WHERE version='003_content_fields'")
+            conn.execute("DELETE FROM schema_migrations WHERE version='004_about_content'")
         with self.assertRaises(ValueError):
             self.initialize(execute=True, lock_file=self.lock, username='owner', password='strong-password-123')

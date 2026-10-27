@@ -3,7 +3,7 @@ import re
 from urllib.parse import unquote, urlsplit
 from uuid import UUID
 from psycopg.types.json import Jsonb
-from app import admin_auth as auth, projects
+from app import admin_auth as auth, projects, about_content
 from app.database import connection, transaction
 from app.settings import Settings
 
@@ -45,7 +45,7 @@ def _url(value, contact):
 
 
 def validate_profile(payload):
-    if not isinstance(payload, dict) or set(payload) != set(FIELDS):
+    if not isinstance(payload, dict) or set(payload) not in (set(FIELDS), set(FIELDS) | {'about_content'}):
         raise auth.invalid_request()
     result = {key: _text(payload[key], limit) for key, limit in [('name', 100), ('title', 200), ('introduction', 20000)]}
     skills = payload['skills']
@@ -70,15 +70,19 @@ def validate_profile(payload):
             if not isinstance(item, dict) or set(item) != {'label', 'url'}:
                 raise auth.invalid_request()
             result[key].append({'label': _text(item['label'], 100, 1), 'url': _url(item['url'], key == 'contacts')})
+    if 'about_content' in payload:
+        result['about_content']=about_content.validate(payload['about_content'])
     return result
 
 
 def _read(conn):
-    row = conn.execute('SELECT name,title,introduction,skills,avatar_file_id,contacts,social_links FROM site_profile WHERE id=1').fetchone()
+    row = conn.execute('SELECT name,title,introduction,skills,avatar_file_id,contacts,social_links,about_content FROM site_profile WHERE id=1').fetchone()
     if row is None:
         return dict(name='', title='', introduction='', skills=[], avatar_file_id=None, contacts=[], social_links=[], projects=[])
     value = dict(zip(FIELDS, row))
     value['avatar_file_id'] = str(value['avatar_file_id']) if value['avatar_file_id'] else None
+    if len(row)>len(FIELDS) and row[len(FIELDS)]:
+        value['about_content']=row[len(FIELDS)]
     return value | {'projects': []}
 
 
@@ -100,5 +104,7 @@ def save_profile(payload, settings: Settings | None = None):
             name=excluded.name,title=excluded.title,introduction=excluded.introduction,skills=excluded.skills,
             avatar_file_id=excluded.avatar_file_id,contacts=excluded.contacts,social_links=excluded.social_links,updated_at=clock_timestamp()''',
             tuple(Jsonb(value[key]) if key in ('contacts','social_links') else value[key] for key in FIELDS))
+        if 'about_content' in value:
+            conn.execute('UPDATE site_profile SET about_content=%s WHERE id=1',(Jsonb(value['about_content']),))
         result = _read(conn)
     return result
