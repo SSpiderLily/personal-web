@@ -9,6 +9,11 @@ const clone = value => JSON.parse(JSON.stringify(value))
 const draft = ref(empty())
 const baseline = ref(empty())
 const skillsText = ref('')
+const aboutFields = [
+  ['page_title','页面标题',200],['page_intro','页面开场白',1000],['about_heading','介绍标题',200],
+  ['about_body','详细介绍',10000],['current_heading','近期项目板块标题',200],['current_project_label','近期项目名称',200],
+  ['current_project_url','近期项目链接',1000],['contact_heading','联系板块标题',200],['contact_intro','联系方式说明',2000],
+]
 const uploadedAvatar = ref(null)
 const uploading = ref(false)
 const uploadApi = { async upload(file) { uploading.value = true; try { return await props.api.upload(file) } finally { uploading.value = false } } }
@@ -28,6 +33,10 @@ function normalized(value) {
   for (const key of ['contacts', 'social_links']) {
     if (!Array.isArray(value[key]) || value[key].some(item => typeof item?.label !== 'string' || typeof item?.url !== 'string')) throw new Error('invalid response')
     result[key] = value[key].map(item => ({ label: item.label, url: item.url }))
+  }
+  if(value.about_content) {
+    if(typeof value.about_content!=='object' || Array.isArray(value.about_content)) throw new Error('invalid response')
+    result.about_content={...value.about_content}
   }
   return result
 }
@@ -58,6 +67,7 @@ async function save() {
   finally { saving.value = false }
 }
 function reset() { if (!saving.value) { draft.value = clone(baseline.value); skillsText.value = baseline.value.skills.join('\n'); uploadedAvatar.value = null; error.value = ''; saved.value = false } }
+function setAbout(key,value) { draft.value.about_content={...(draft.value.about_content || {}),[key]:value} }
 function setAvatar(value) {
   if (!ready.value) return
   if (!value) { draft.value.avatar_file_id = null; uploadedAvatar.value = null; return }
@@ -101,6 +111,7 @@ defineExpose({ dirty, clearDraft, revalidate })
         </div>
         <button type="button" :disabled="draft[group.key].length >= 20" @click="draft[group.key].push({ label: '', url: '' })">添加{{ group.label }}</button>
       </fieldset>
+      <fieldset :disabled="loading || saving || uploading"><legend>关于页面文案</legend><p>留空字段使用默认文案。项目入口使用 /#/works 或完整 HTTP(S) 链接。</p><label v-for="[key,label,limit] in aboutFields" :key="key">{{ label }}<textarea v-if="key==='about_body' || key==='contact_intro'" :value="draft.about_content?.[key] || ''" :aria-label="label" :maxlength="limit" rows="5" @input="setAbout(key,$event.target.value)"></textarea><input v-else :value="draft.about_content?.[key] || ''" :aria-label="label" :maxlength="limit" @input="setAbout(key,$event.target.value)"></label></fieldset>
       <div class="profile-actions"><button type="submit" :disabled="loading || saving || uploading || !dirty" @click.prevent="save">{{ saving ? '正在保存…' : '保存资料' }}</button><button type="button" :disabled="loading || saving || uploading || !dirty" @click="reset">撤销更改</button><span v-if="saved" role="status">已保存</span><span v-else-if="dirty">有未保存的更改</span></div>
     </form>
   </section>

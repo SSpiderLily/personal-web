@@ -42,3 +42,19 @@ test('non-home public path and failed or closed detail do not collect project vi
  let resolve;const page=mountPublic({project:()=>new Promise(r=>resolve=r)})
  try{await flush();const opening=page.state.showProject({id:4});page.state.detailsDialog.open=false;page.state.restoreScroll();resolve({id:4});await opening;assert.deepEqual(page.calls,['create','website'])}finally{page.unmount()}
 })
+
+
+test('saved blank About fields use defaults while nonempty text and current project survive',async()=>{
+ const page=mountPublic()
+ try{
+  await flush()
+  page.state.projects=[{id:1,name:'数据库中的项目'}]
+  page.state.profile={name:'rewind',title:'',introduction:'',skills:[],about_content:{page_title:'',about_body:'',current_project_url:'',contact_heading:'写信给我'}}
+  await Vue.nextTick()
+  assert.equal(page.state.about.page_title,'关于我')
+  assert.equal(page.state.about.about_body,'在这里整理项目，也为学习记录和小实验留一个位置。')
+  assert.equal(page.state.about.current_project_label,'数据库中的项目')
+  assert.equal(page.state.about.current_project_url,'/#/works')
+  assert.equal(page.state.about.contact_heading,'写信给我')
+ }finally{page.unmount()}
+})

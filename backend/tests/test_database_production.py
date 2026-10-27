@@ -47,12 +47,12 @@ class ProductionMigrationTests(unittest.TestCase):
 
     def test_readonly_no_history_no_table_creation_and_execute_idempotent(self):
         result = self.run_command()
-        self.assertEqual(result, {'database': self.settings.db_name, 'user': 'personal_web_test', 'applied': [], 'pending': ['001_admin_schema', '002_tool_defaults', '003_content_fields']})
+        self.assertEqual(result, {'database': self.settings.db_name, 'user': 'personal_web_test', 'applied': [], 'pending': ['001_admin_schema', '002_tool_defaults', '003_content_fields', '004_about_content']})
         with database.connection() as conn:
             self.assertIsNone(conn.execute("SELECT to_regclass('public.schema_migrations')").fetchone()[0])
         result = self.run_command(execute=True, lock_file=self.lock)
         self.assertEqual(result['pending'], [])
-        self.assertEqual(len(result['applied']), 3)
+        self.assertEqual(len(result['applied']), 4)
         self.assertEqual(self.run_command(execute=True, lock_file=self.lock), result)
 
     def test_missing_lock_and_identity_mismatch_are_refused(self):
@@ -182,4 +182,4 @@ class ProductionMigrationTests(unittest.TestCase):
         # Distinct release locks still serialize on the established database lock.
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = list(executor.map(lambda n: self.run_command(execute=True, lock_file=self.lock+str(n)), range(2)))
-        self.assertTrue(all(len(result['applied']) == 3 and not result['pending'] for result in results))
+        self.assertTrue(all(len(result['applied']) == 4 and not result['pending'] for result in results))
