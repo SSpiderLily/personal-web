@@ -85,7 +85,7 @@ onMounted(load)
 
 <template>
   <section class="tools-panel" aria-label="小工具设置" :aria-busy="loading || saving">
-    <p class="tools-intro">调整工具的显示和顺序。九宫格工具仍为占位，骰子单独悬浮显示。</p>
+    <p class="tools-intro">调整工具的显示和顺序。图片压缩和随手画板已接入，其余位置待开放；骰子单独悬浮显示。</p>
     <p v-if="loading" role="status">正在加载工具设置…</p>
     <div v-if="error" class="tools-error" role="alert">
       <p>{{ error }}</p>
@@ -96,7 +96,7 @@ onMounted(load)
         <legend>九宫格工具</legend>
         <ul class="tools-list">
           <li v-for="(item, index) in grid" :key="item.tool_key">
-            <span class="tools-name">工具占位 {{ Number(item.tool_key.slice(-2)) }}</span>
+            <span class="tools-name">{{ { grid_01: '图片压缩', grid_02: '随手画板' }[item.tool_key] || `工具占位 ${Number(item.tool_key.slice(-2))}` }}</span>
             <label><input v-model="item.is_visible" type="checkbox" :aria-label="`${item.tool_key} 显示`" @change="saved = false"> 显示</label>
             <div class="tools-order">
               <button type="button" :aria-label="`${item.tool_key} 上移`" :disabled="index === 0" @click="move(item.tool_key, -1)">上移</button>

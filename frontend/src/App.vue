@@ -6,6 +6,7 @@ import { fetchProjects, fetchProject } from './projects/publicProjects.js'
 import { projectImageUrl, projectLink } from './projects/projectContent.js'
 import DiceGame from './components/DiceGame.vue'
 import ToolGrid from './components/ToolGrid.vue'
+import { allowPageNavigation } from './tools/navigationGuard.js'
 import { usePublicTools } from './tools/publicTools.js'
 const { status: toolsStatus, error: toolsError, gridItems, diceVisible, load: loadTools } = usePublicTools()
 const profile = ref(null)
@@ -24,7 +25,7 @@ const about=computed(()=>({...{
   about_body:'在这里整理项目，也为学习记录和小实验留一个位置。',current_heading:'最近的实践',current_project_label:projects.value[0]?.name || '',current_project_url:'/#/works',contact_heading:'找到我',contact_intro:'欢迎交流项目实践。',
 },...Object.fromEntries(Object.entries(profile.value?.about_content || {}).filter(([,value])=>value!==''))}))
 function focusMain(){document.querySelector?.('main')?.focus()}
-function syncRoute(){detailsDialog.value?.close?.();page.value=routeFromHash();document.title=`${pages.find(p=>p.id===page.value).label} · ${displayName.value}`;window.scrollTo?.({top:0,behavior:'instant'});loadProfile()}
+function syncRoute(){if(!allowPageNavigation(window,page.value,routeFromHash()))return;detailsDialog.value?.close?.();page.value=routeFromHash();document.title=`${pages.find(p=>p.id===page.value).label} · ${displayName.value}`;window.scrollTo?.({top:0,behavior:'instant'});loadProfile()}
 function refreshVisible(){if(document.visibilityState==='visible')loadProfile()}
 function workKind(project){return project.category?.includes('实验')?'实验':project.category?.includes('工具')?'工具':'项目'}
 const visibleProjects=computed(()=>category.value==='全部'?projects.value:projects.value.filter(p=>workKind(p)===category.value))
@@ -174,13 +175,13 @@ onMounted(() => {
 
       <template v-else-if="page === 'works'">
         <section class="page-intro"><p class="eyebrow">THE THINGS I MAKE</p><h1>作品<span class="serif-accent">与尝试。</span></h1><p>让想法落地，也为新的可能留一点位置。</p></section>
-        <div class="works-toolbar"><div class="filters" role="group" aria-label="作品分类"><button v-for="item in categories" :key="item" :aria-pressed="category === item" :class="{selected:category === item}" @click="category=item">{{ item }}<span v-if="item === '全部'">{{ projects.length + (diceVisible ? 1 : 0) }}</span></button></div><span class="muted-meta">持续构建中 <span class="tiny-dot"></span></span></div>
-        <p v-if="projectsLoading" class="profile-status" role="status">正在加载项目…</p><p v-else-if="projectsError" class="profile-status" role="alert">{{ projectsError }} <button class="retry" @click="loadProjects">重试</button></p><div class="works-grid">
+        <div class="works-toolbar"><div class="filters" role="group" aria-label="作品分类"><button v-for="item in categories" :key="item" :aria-pressed="category === item" :class="{selected:category === item}" @click="category=item">{{ item }}<span v-if="item === '全部'">{{ projects.length + gridItems.filter(item => ['grid_01', 'grid_02'].includes(item.tool_key)).length }}</span></button></div><span class="muted-meta">持续构建中 <span class="tiny-dot"></span></span></div>
+        <p v-if="projectsLoading" class="profile-status" role="status">正在加载项目…</p><p v-else-if="projectsError" class="profile-status" role="alert">{{ projectsError }} <button class="retry" @click="loadProjects">重试</button></p><div v-if="visibleProjects.length" class="works-grid">
 <article v-for="project in visibleProjects" :key="project.id" class="feature-project"><button class="project-cover" :aria-label="`查看${project.name}完整详情`" aria-haspopup="dialog" @click="showProject(project)"><div class="cover-heading"><span>{{ project.name }}</span><span>{{ project.category }} ↗</span></div><img v-if="projectImageUrl(project.cover_file_id)" :src="projectImageUrl(project.cover_file_id)" :alt="project.cover_alt" width="1280" height="720"><span v-else class="cover-caption">从一个想法开始。</span><span class="cover-open" aria-hidden="true">↗</span></button><div class="project-info"><div class="project-info-top"><span class="category-label">{{ project.category || '项目' }}</span><span class="muted-meta">{{ project.tech_stack.join(' · ') }}</span></div><button class="project-title" @click="showProject(project)" aria-haspopup="dialog">{{ project.name }} <span aria-hidden="true">↗</span></button><p>{{ project.summary }}</p></div></article>
-          <article v-if="diceVisible && (category === '全部' || category === '工具')" class="feature-project"><div class="dice-cover"><span class="cover-heading">LITTLE UTILITIES <span>01 — DICE</span></span><span class="dice-illustration" aria-hidden="true">⚄</span><span class="cover-caption">给犹豫的时刻，一点随机。</span></div><div class="project-info"><div class="project-info-top"><span class="category-label">工具 / 随机选择</span><span class="muted-meta">Three.js</span></div><h2 class="project-title">骰子小玩具 <span aria-hidden="true">↙</span></h2><p>点一下页面左下角的骰子，看看这次的手气。</p></div></article>
+
         </div>
         <div v-if="!projectsLoading && !projectsError && !visibleProjects.length && !(diceVisible && (category === '全部' || category === '工具'))" class="page-empty" role="status"><span class="empty-icon" aria-hidden="true">✧</span><h2>这个分类暂时还没有作品。</h2><p>新的实践，会陆续放在这里。</p><button class="button button-outline" @click="category='全部'">浏览全部作品 <span aria-hidden="true">→</span></button></div>
-        <section v-if="category==='全部' || category==='工具'" class="utilities-section"><h2>小工具</h2><p v-if="toolsStatus==='loading'" role="status">正在加载小工具…</p><p v-else-if="toolsError" role="alert">{{ toolsError }} <button @click="loadTools">重试</button></p><ToolGrid v-else-if="gridItems.length" :items="gridItems" /><p v-else class="profile-status">暂未展示其他小工具。</p></section><p class="endnote">每一次动手，都是一次新的探索。<span aria-hidden="true">✳</span></p>
+        <section v-if="category==='全部' || category==='工具'" class="utilities-section" :class="{ 'utilities-first': !visibleProjects.length }"><h2>小工具</h2><p v-if="toolsStatus==='loading'" role="status">正在加载小工具…</p><p v-else-if="toolsError" role="alert">{{ toolsError }} <button @click="loadTools">重试</button></p><ToolGrid v-else-if="gridItems.length" :items="gridItems" /><p v-else class="profile-status">暂未展示其他小工具。</p></section><p class="endnote">每一次动手，都是一次新的探索。<span aria-hidden="true">✳</span></p>
       </template>
 
       <template v-else-if="page === 'notes'">

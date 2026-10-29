@@ -3,23 +3,37 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
 import { parse, compileScript } from '@vue/compiler-sfc'
+import * as imageProcessing from '../src/tools/imageProcessing.js'
+import * as drawing from '../src/tools/drawing.js'
 
 const defaults = () => ({ tools: [...Array.from({ length: 9 }, (_, i) => ({ tool_key: `grid_0${i+1}`, placement: 'grid', is_visible: true, sort_order: i })), { tool_key: 'dice', placement: 'floating', is_visible: true, sort_order: 0 }] })
 const flush = async () => { await new Promise(resolve => setImmediate(resolve)); await Vue.nextTick() }
-function mount(path, props) {
+function compileComponent(path) {
   const { descriptor } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'))
+  const components = {}
   const code = compileScript(descriptor, { id: 'tools-test', inlineTemplate: true }).content
     .replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) => 'const {' + names.replace(/(\w+) as (\w+)/g, '$1: $2') + '} = Vue')
+    .replace(/import \{([^}]+)\} from ['"]\.\.\/tools\/(imageProcessing|drawing)\.js['"]/g, (_, names, module) => `const {${names}} = ${module}`)
+    .replace(/import (\w+) from ['"]([^'"]+\.vue)['"]/g, (_, name, child) => {
+      components[name] = compileComponent(new URL(child, new URL(path, import.meta.url)).href)
+      return `const ${name} = components.${name}`
+    })
+    .replace(/^import ['"][^'"]+\.css['"]$/gm, '')
     .replace('export default', 'return')
-  const component = new Function('Vue', code)(Vue)
-  const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, events: {}, addEventListener(name, handler) { this.events[name] = handler } })
+  return new Function('Vue', 'imageProcessing', 'drawing', 'components', code)(Vue, imageProcessing, drawing, components)
+}
+function mount(path, props) {
+  const priorWindow = globalThis.window
+  globalThis.window = new EventTarget()
+  const component = compileComponent(path)
+  const element = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, events: {}, get options() { return this.children.filter(child => child.type === 'option') }, get tagName() { return this.type.toUpperCase() }, getContext() { return null }, showModal() { this.open = true }, close() { this.open = false; this.props.onClose?.() }, addEventListener(name, handler) { this.events[name] = handler } })
   const renderer = Vue.createRenderer({ createElement: element, createText: text => element('#text', text), createComment: text => element('#comment', text),
     setText(node,text) { node.text=text }, setElementText(node,text) { node.text=text; node.children=[] }, patchProp(node,key,old,value) { node.props[key]=value },
     insert(node,parent,anchor) { if(node.parent) node.parent.children.splice(node.parent.children.indexOf(node),1); const i=anchor?parent.children.indexOf(anchor):-1; parent.children.splice(i<0?parent.children.length:i,0,node); node.parent=parent },
     remove(node) { node.parent.children.splice(node.parent.children.indexOf(node),1) }, parentNode: node=>node.parent, nextSibling: node=>node.parent?.children[node.parent.children.indexOf(node)+1] })
   const root=element('root'), app=renderer.createApp(component,props); app.mount(root)
   const nodes = () => { const all=[]; const visit=n=>{all.push(n);n.children.forEach(visit)};visit(root);return all }
-  return { nodes, text: () => nodes().map(n=>n.text).join(' '), unmount:()=>app.unmount() }
+  return { nodes, text: () => nodes().map(n=>n.text).join(' '), unmount:()=>{app.unmount();globalThis.window=priorWindow} }
 }
 const button = (page,label) => page.nodes().find(n=>n.type==='button'&&n.text===label)
 const toggle = (node, checked) => { node.checked = checked; node.events.change({ target: node }) }
@@ -106,4 +120,31 @@ test('ToolsPanel load 401 emits authentication loss and malformed success retain
     assert.match(page.text(), /暂时不可用/)
     assert.equal(button(page, '保存设置').props.disabled, false)
   } finally { page.unmount() }
+})
+
+
+test('tool launchers respect supplied visibility/order and mount local tools only on demand without external navigation', async () => {
+  const page = mount('../src/components/ToolGrid.vue', { items: [defaults().tools[1], defaults().tools[0]] })
+  try {
+    assert.equal(page.nodes().filter(n => n.type === 'iframe').length, 0)
+    const launchers = page.nodes().filter(n => n.type === 'button' && n.props['aria-haspopup'] === 'dialog')
+    assert.equal(launchers.length, 2)
+    assert.match(launchers[0].props['aria-label'], /画板/)
+    await launchers[0].props.onClick()
+    await flush()
+    assert.equal(page.nodes().filter(n => n.type === 'iframe').length, 0)
+    assert.equal(page.nodes().filter(n => n.type === 'canvas').length, 1)
+    assert.equal(page.nodes().filter(n => n.type === 'a' && /^https?:/.test(n.props.href)).length, 0)
+    page.nodes().find(n => n.type === 'dialog').props.onClose()
+    await flush()
+    assert.equal(page.nodes().filter(n => n.type === 'iframe').length, 0)
+    await launchers[1].props.onClick()
+    await flush()
+    assert.equal(page.nodes().filter(n => n.type === 'canvas').length, 0)
+    assert.ok(page.nodes().some(n => n.type === 'input' && n.props.type === 'file'))
+    assert.equal(page.nodes().filter(n => n.type === 'iframe').length, 0)
+  } finally { page.unmount() }
+  const hidden = mount('../src/components/ToolGrid.vue', { items: [defaults().tools[7]] })
+  try { assert.equal(hidden.nodes().filter(n => n.props['aria-haspopup'] === 'dialog').length, 0) }
+  finally { hidden.unmount() }
 })

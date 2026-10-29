@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import * as Vue from 'vue'
 import { parse, compileScript } from '@vue/compiler-sfc'
+import { allowPageNavigation } from '../src/tools/navigationGuard.js'
 
 const flush=async()=>{await new Promise(resolve=>setImmediate(resolve));await Vue.nextTick()}
 function mountPublic({path='/',project=async id=>({id}),failContent=false}={}) {
@@ -16,7 +17,7 @@ function mountPublic({path='/',project=async id=>({id}),failContent=false}={}) {
  const script=compileScript(descriptor,{id:'public-visits',inlineTemplate:false}).content
   .replace(/import \{([^}]+)\} from ['"]vue['"]/g,(_,names)=>'const {'+names.replace(/(\w+) as (\w+)/g,'$1: $2')+'}=Vue')
   .replace(/^import .*$/gm,'').replace('export default','return')
- const component=new Function('Vue','createVisitCollector','usePublicTools','fetchProjects','fetchProject','ProjectContent','PublicProfile','DiceGame','ToolGrid','projectImageUrl','projectLink',script)(Vue,()=>{calls.push('create');return collector},()=>({status:Vue.ref('ready'),error:Vue.ref(''),gridItems:Vue.ref([]),diceVisible:Vue.ref(false),load:()=>{}}),async()=>{if(failContent)throw new Error('offline');return []},project,null,null,null,null,()=>null,()=>null)
+ const component=new Function('allowPageNavigation','Vue','createVisitCollector','usePublicTools','fetchProjects','fetchProject','ProjectContent','PublicProfile','DiceGame','ToolGrid','projectImageUrl','projectLink',script)(allowPageNavigation,Vue,()=>{calls.push('create');return collector},()=>({status:Vue.ref('ready'),error:Vue.ref(''),gridItems:Vue.ref([]),diceVisible:Vue.ref(false),load:()=>{}}),async()=>{if(failContent)throw new Error('offline');return []},project,null,null,null,null,()=>null,()=>null)
  const renderer=Vue.createRenderer({createComment:()=>({}),insert:()=>{},remove:()=>{},parentNode:()=>null,nextSibling:()=>null})
  const app=renderer.createApp({...component,render:()=>null});const instance=app.mount({})
  const state=instance.$.setupState
